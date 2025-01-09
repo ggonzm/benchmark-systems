@@ -1,5 +1,6 @@
 from typing import Sequence
 import numpy as np
+from numpy import sin, cos, exp, sqrt
 from .common import Const
 
 def pendulum(t, x, *,
@@ -28,7 +29,7 @@ def pendulum(t, x, *,
     # State space
     dx = np.zeros(2)
     dx[0] = x[1]
-    dx[1] = -g/L * np.sin(x[0]) - drag/m*x[1] + 1/(m*L**2)*u
+    dx[1] = -g/L * sin(x[0]) - drag/m*x[1] + 1/(m*L**2)*u
 
     return dx
 
@@ -87,17 +88,15 @@ def cart_pendulum(t, x, *,
     u : float, optional
         Force applied to the cart. Default is 0.0.
     '''
-    sin_x3 = np.sin(x[2])
-    cos_x3 = np.cos(x[2])
-    den = -M + m*cos_x3**2 - m
+    den = -M + m*cos(x[2])**2 - m
     g = Const.GRAVITY
 
     # State space
     dx = np.zeros(4)
     dx[0] = x[1]
-    dx[1] = (-L*m*x[3]**2*sin_x3 + drag*x[1] - g*m*sin_x3*cos_x3 - u) / den
+    dx[1] = (-L*m*x[3]**2*sin(x[2]) + drag*x[1] - g*m*sin(x[2])*cos(x[2]) - u) / den
     dx[2] = x[3]
-    dx[3] = (L*m*x[3]**2*sin_x3*cos_x3 - drag*x[1]*cos_x3 + (M+m)*g*sin_x3 + u*cos_x3) / (L*den)
+    dx[3] = (L*m*x[3]**2*sin(x[2])*cos(x[2]) - drag*x[1]*cos(x[2]) + (M+m)*g*sin(x[2]) + u*cos(x[2])) / (L*den)
 
     return dx 
 
@@ -175,10 +174,10 @@ def johansson(t, h, *,
 
     # State space
     dh = np.zeros(4)
-    dh[0] = -(a[0]/A[0]) * np.sqrt(2*g*h_clip[0]) + (a[2]/A[0]) * np.sqrt(2*g*h_clip[2]) + (1-gamma[0])*K[0]*u[0]/A[0]
-    dh[1] = -(a[1]/A[1]) * np.sqrt(2*g*h_clip[1]) + (a[3]/A[1]) * np.sqrt(2*g*h_clip[3]) + (1-gamma[1])*K[1]*u[1]/A[1]
-    dh[2] = -(a[2]/A[2]) * np.sqrt(2*g*h_clip[2]) + gamma[1]*K[1]*u[1]/A[2]
-    dh[3] = -(a[3]/A[3]) * np.sqrt(2*g*h_clip[3]) + gamma[0]*K[0]*u[0]/A[3]
+    dh[0] = -(a[0]/A[0]) * sqrt(2*g*h_clip[0]) + (a[2]/A[0]) * sqrt(2*g*h_clip[2]) + (1-gamma[0])*K[0]*u[0]/A[0]
+    dh[1] = -(a[1]/A[1]) * sqrt(2*g*h_clip[1]) + (a[3]/A[1]) * sqrt(2*g*h_clip[3]) + (1-gamma[1])*K[1]*u[1]/A[1]
+    dh[2] = -(a[2]/A[2]) * sqrt(2*g*h_clip[2]) + gamma[1]*K[1]*u[1]/A[2]
+    dh[3] = -(a[3]/A[3]) * sqrt(2*g*h_clip[3]) + gamma[0]*K[0]*u[0]/A[3]
 
     # If tanks are full, they can only be emptied (dh<0) or remain full (dh=0)
     for i in range(4):
@@ -321,9 +320,9 @@ def cstr(t, x, *,
     Cb = max(Cb, Const.ZERO)
 
     # Arrhenius equations
-    k1 = K0_ab * np.exp(-Ea_ab / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
-    k2 = K0_bc * np.exp(-Ea_bc / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
-    k3 = K0_ad * np.exp(-Ea_ad / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k1 = K0_ab * exp(-Ea_ab / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k2 = K0_bc * exp(-Ea_bc / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k3 = K0_ad * exp(-Ea_ad / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
 
     # State space
     dCa = F*(Ca_in - Ca) - k1*Ca - k3*Ca**2
