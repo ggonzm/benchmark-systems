@@ -336,3 +336,82 @@ def cstr(t, x, *,
         dx[i] = dx[i] if x[i] > Const.ZERO else max(dx[i], Const.ZERO)
 
     return dx
+
+def quadrotor(t, states, *,
+              Ixx: float, Iyy: float, Izz: float,
+              k: float, L: float, m: float, drag: float,
+              u: Sequence[float] = [0.0, 0.0, 0.0, 0.0]) -> np.ndarray:
+    '''
+    Quadrotor expressions obtained from Newton-Euler formalism.
+    The code is mainly based on:
+    - https://doi.org/10.1155/2014/320526
+    But it is also influenced by:
+    - https://doi.org/10.1016/j.automatica.2009.10.018
+    - https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
+
+    The axis system is the one of two last references, rather than the original presented in the first reference.
+
+    Parameters
+    ----------
+    t : float
+        Time.
+    states : Sequence[float]
+        State variables [x, y, z, phi, theta, psi, s, v, w, p, q, r].
+    Ixx : float
+        Moment of inertia around the x-axis (in the body frame).
+    Iyy : float
+        Moment of inertia around the y-axis (in the body frame).
+    Izz : float
+        Moment of inertia around the z-axis (in the body frame).
+    k : float
+        Thrust factor of the propellers.
+    L : float
+        Distance from the center of mass to the propellers.
+    m : float
+        Mass of the quadrotor.
+    drag : float
+        Drag factor of the quadrotor.
+    u : Sequence[float], optional
+        Squared angular velocities of the propellers [w1^2, w2^2, w3^2, w4^2]. Default is [0.0, 0.0, 0.0, 0.0].
+    '''
+    # Position of the center of mass relative to the inertial frame
+    x, y, z = states[:3]
+    # Euler angles (roll, pitch, yaw) relative to the inertial frame
+    phi, theta, psi = states[3:6]
+    # Linear velocities of the center of mass relative to the body frame
+    s, v, w = states[6:9]
+    # Angular velocities relative to the body frame
+    p, q, r = states[9:12]
+
+    # Torques and thrust
+    tau_phi, tau_theta, tau_psi, F = (
+        L*k*(-u[1] + u[3]),
+        L*k*(-u[0] + u[2]),
+        drag*(-u[0] + u[1] - u[2] + u[3]),
+        k*np.sum(u)
+    )
+
+    # Rotation matrix (relates linear velocities in the body frame to the inertial frame)
+    R = np.array([[cos(psi)*cos(theta), cos(psi)*sin(theta)*sin(phi) - sin(psi)*cos(phi), cos(psi)*sin(theta)*cos(phi) + sin(psi)*sin(phi)],
+                  [sin(psi)*cos(theta), sin(psi)*sin(theta)*sin(phi) + cos(psi)*cos(phi), sin(psi)*sin(theta)*cos(phi) - cos(psi)*sin(phi)],
+                  [        -sin(theta),                              cos(theta)*sin(phi),                              cos(theta)*cos(phi)]])
+    # Rotation matrix (relates angular velocities in the body frame to the inertial frame)
+    W = np.array([[1,         0,         -sin(theta)], # type: ignore
+                  [0,  cos(phi), cos(theta)*sin(phi)],
+                  [0, -sin(phi), cos(theta)*cos(phi)]])
+
+    # Quadrotor forces relative to the body frame
+    fx, fy, fz = R.T @ np.array([0, 0, -m*Const.GRAVITY]) + np.array([0, 0, F])
+    
+    # State space
+    dstates = np.zeros(12)
+    # dx, dy, dz
+    dstates[:3] = R @ np.array([s, v, w])
+    # ds, dv, dw
+    dstates[6:9] = np.array([r*v - q*w, p*w - r*s, q*s - p*v]) + (1/m)*np.array([fx, fy, fz])
+    # dphi, dtheta, dpsi
+    dstates[3:6] = np.linalg.inv(W) @ np.array([p, q, r])
+    # dp, dq, dr
+    dstates[9:12] = np.array([(Iyy-Izz)/Ixx, (Izz-Ixx)/Iyy, (Ixx-Iyy)/Izz]) * np.array([q*r, p*r, p*q]) + np.array([tau_phi/Ixx, tau_theta/Iyy, tau_psi/Izz])
+
+    return dstates
