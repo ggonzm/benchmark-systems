@@ -71,6 +71,7 @@ def cart_pendulum(t, x, *,
     '''
     Cart-pendulum expressions obtained from Euler-Lagrange equations and Rayleigh dissipation equation.
     No inertia is considered and the mass of the pendulum is concentrated in its end.
+    The model can be derived following Steve Brunton's Control Bootcamp.
 
     Parameters
     ----------
@@ -144,7 +145,7 @@ def johansson(t, h, *,
               A: Sequence[float], a: Sequence[float], K: Sequence[float], h_max: Sequence[float],
               u: Sequence[float] = [0.0, 0.0], gamma: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
     '''
-    K.H Johansson - DOI: 10.1109/87.845876
+    Multivariable laboratory process that consists of four interconnected water tanks. Proposed by K.H. Johansson (https://doi.org/10.1109/87.845876).
     
     Three-way valves work inversely in the current implementation.
 
