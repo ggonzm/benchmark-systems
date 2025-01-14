@@ -70,6 +70,7 @@ def cart_pendulum(t, x, *,
             m: float, M: float, L: float, drag: float = 0.0, u: float = 0.0) -> np.ndarray:
     '''
     Cart-pendulum expressions obtained from Euler-Lagrange equations and Rayleigh dissipation equation.
+    No inertia is considered and the mass of the pendulum is concentrated in its end.
 
     Parameters
     ----------
@@ -140,8 +141,8 @@ def spring_mass_damper(t, x, *,
     return dx
 
 def johansson(t, h, *, 
-              u: Sequence[float], gamma: Sequence[float],
-              A: Sequence[float], a: Sequence[float], K: Sequence[float], h_max: Sequence[float]) -> np.ndarray:
+              A: Sequence[float], a: Sequence[float], K: Sequence[float], h_max: Sequence[float],
+              u: Sequence[float] = [0.0, 0.0], gamma: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
     '''
     K.H Johansson - DOI: 10.1109/87.845876
     
@@ -153,10 +154,6 @@ def johansson(t, h, *,
         Time.
     h : Sequence[float]
         Water heights (in cm)
-    u : Sequence[float]
-        Pump setpoints (0-100%).
-    gamma : Sequence[float]
-        Valve openings (0-1).
     A : Sequence[float]
         Base areas of tanks.
     a : Sequence[float]
@@ -165,6 +162,10 @@ def johansson(t, h, *,
         Pump constants.
     h_max : Sequence[float]
         Tank saturations (in cm).
+    u : Sequence[float], optional
+        Pump setpoints (0-100%). Default is [0.0, 0.0].
+    gamma : Sequence[float], optional
+        Valve openings (0-1). Default is [0.0, 0.0].
     '''
 
     g = Const.GRAVITY * 100 # cm/s^2
@@ -348,6 +349,7 @@ def quadrotor(t, states, *,
     But it is also influenced by:
     - https://doi.org/10.1016/j.automatica.2009.10.018
     - https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
+    Currently, no aerodynamic effects are considered.
 
     The axis system is the one of two last references, rather than the original presented in the first reference.
 

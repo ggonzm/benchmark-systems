@@ -9,6 +9,8 @@ def double_cart_pendulum(t, x, x_dot, *,
     Double cart-pendulum expressions obtained from Euler-Lagrange equations. No drag is considered.
     The equations are the same presented in https://www.do-mpc.com/en/latest/example_gallery/DIP.html,
     substituting theta1 and theta2 by pi - theta1 and pi - theta2, respectively.
+    The masses of the pendulums are considered to be concentrated in the middle of the bars.
+    No frictions are considered.
 
     Parameters
     ----------
@@ -51,21 +53,118 @@ def double_cart_pendulum(t, x, x_dot, *,
     p8 = m2*l2*g
 
     
-    g = np.zeros(6)
+    G = np.zeros(6)
     # ODEs ... Relation between the state variables and their derivatives
-    g[0] = dx - x_dot
-    g[1] = omega1 - theta1_dot
-    g[2] = omega2 - theta2_dot
+    G[0] = dx - x_dot
+    G[1] = omega1 - theta1_dot
+    G[2] = omega2 - theta2_dot
     # Euler-Lagrange equations ... All terms in one side of the equations (0 = g(x, z))
-    g[3] =  p1*ddx + p2*alpha1*cos(theta1) + p3*alpha2*cos(theta2) - (
+    G[3] =  p1*ddx + p2*alpha1*cos(theta1) + p3*alpha2*cos(theta2) - (
         p2*omega1**2*sin(theta1) + p3*omega2**2*sin(theta2) + u)
-    g[4] = -p2*cos(theta1)*ddx - p4*alpha1 - p5*alpha2*cos(theta1 - theta2) - (
+    G[4] = -p2*cos(theta1)*ddx - p4*alpha1 - p5*alpha2*cos(theta1 - theta2) - (
         p7*sin(theta1) + p5*omega2**2*sin(theta1 - theta2))
-    g[5] = -p3*cos(theta2)*ddx - p5*alpha1*cos(theta1 - theta2) - p6*alpha2 - (
+    G[5] = -p3*cos(theta2)*ddx - p5*alpha1*cos(theta1 - theta2) - p6*alpha2 - (
         -p5*omega1**2*sin(theta1 - theta2) + p8*sin(theta2))
     
-    return g
+    return G
 
+def multilevel_cart_pendulum(t, x, x_dot, *,
+                        M: float, m: Sequence[float], L: Sequence[float],
+                        deltas: Sequence[float] | None = None, u: float = 0.0) -> np.ndarray:
+    '''
+    Multilevel cart-pendulum expressions obtained from Euler-Lagrange equations.
+    The equations are the same presented in https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1712457
+    for the N-level inverted pendulum, substituting thetaN by pi - thetaN.
+    The masses of the pendulums are considered to be concentrated in the middle of the bars.
+    The frictions of the cart and pendulums can be considered.
+
+    Parameters
+    ----------
+    t : float
+        Time.
+    x : Sequence[float]
+        State variables [x, theta1, ..., thetaN, dx, omega1, ..., omegaN]. ThetaN = pi corresponds to the pendulum pointing up.
+    x_dot : Sequence[float]
+        Derivatives of the state variables [dx, omega1, ..., omegaN, ddx, alpha1, ..., alphaN].
+    M : float
+        Mass of the cart.
+    m : Sequence[float]
+        Masses of the pendulums.
+    L : Sequence[float]
+        Lengths of the pendulums.
+    deltas : Sequence[float], optional
+        Friction coefficients. The first one corresponds to the friction between the cart and the ground, while the others correspond to the rotational friction of the pendulums.
+        Default is None.
+    u : float, optional
+        Force applied to the cart. Default is 0.0.
+    '''
+    half = len(x) // 2 # First half are positions and angles, second half are velocities and angular velocities
+    x, thetas, dx, omegas = x[0], x[1:half], x[half], x[half+1:]
+    x_dot, theta_dots, ddx, alphas = x_dot[0], x_dot[1:half], x_dot[half], x_dot[half+1:]
+
+    g = Const.GRAVITY
+    npendulums = len(m) # Number of pendulums
+    l = [L[i]/2 for i in range(npendulums)] # Half of the length of the pendulums
+    J = [(m[i] * l[i]**2) / 3 for i in range(npendulums)] # Inertia of the pendulums
+    f = np.abs(np.array(deltas) @ np.array([[dx], omegas])) if deltas is not None else [0.0]*(1+npendulums) # Friction forces ... Proportional to the velocities
+
+    # Model coefficients
+    a0 = M + sum(m)
+    a = [
+            m[i]*l[i] + sum([m[j]*L[i] for j in range(i+1, npendulums)])
+            for i in range(npendulums)
+        ]
+    b = [
+            J[i] + m[i]*l[i]**2 + sum([m[j]*L[i]**2 for j in range(i+1, npendulums)])
+            for i in range(npendulums)
+        ]
+    
+    # Model matrices
+    # H1 ... Symmetric matrix
+    H1_diag = np.diag([a0] + b)
+    H1_tri = np.zeros((npendulums+1, npendulums+1))
+    for i in range(npendulums+1): # Fill the upper triangular part of the matrix
+        for j in range(i,npendulums):
+            if i == 0: # First row
+                H1_tri[i, j+1] = -a[j]*cos(thetas[j])
+            else:
+                H1_tri[i, j+1] = a[j]*L[i-1]*cos(thetas[j]-thetas[i-1])
+    H1 = H1_diag + H1_tri + H1_tri.T
+    
+    # H2
+    H2_diag = np.diag([-f[0]] + [-f[i]-f[i+1] for i in range(1,npendulums)] + [-f[-1]])
+    H2_tri_sup, H2_tri_inf = [np.zeros((npendulums+1, npendulums+1)) for _ in range(2)]
+    for i in range(npendulums+1): # Fill the upper triangular part of the matrix
+        for j in range(i,npendulums):
+            if i == 0: # First row
+                H2_tri_sup[i, j+1] = -a[j]*sin(thetas[j])*omegas[j]
+            else:
+                H2_tri_sup[i, j+1] = a[j]*L[i-1]*omegas[j]*sin(thetas[j]-thetas[i-1])
+    for j in range(1, npendulums+1): # Fill the lower triangular part of the matrix, except the first column
+        for i in range(j, npendulums):
+            H2_tri_inf[i+1, j] = -a[i]*L[j-1]*sin(thetas[i]-thetas[j-1])*omegas[j-1]
+            
+    H2 = H2_diag + H2_tri_sup + H2_tri_inf
+    for i in range(1, npendulums): # Add friction terms to the first elements on the right and bottom of the diagonal
+        H2[i, i+1] += f[i]
+        H2[i+1, i] += f[i]
+    
+    # h3
+    h3 = np.array([0] + [a[i]*g*sin(thetas[i]) for i in range(npendulums)])
+
+    # h0
+    h0 = np.zeros_like(h3)
+    h0[0] = 1
+
+    
+    G = np.zeros(2*half)
+    # ODEs ... Relation between the state variables and their derivatives
+    G[0] = dx - x_dot
+    G[1:half] = omegas - theta_dots
+    # Euler-Lagrange equations ... All terms in one side of the equations (0 = g(x, z))
+    G[half:] = H2 @ np.concatenate([[dx], -omegas]) + h3 + h0*u - H1 @ np.concatenate([[ddx], -alphas])
+
+    return G
 
 def quadrotor(t, states, states_dot, *,
               Ixx: float, Iyy: float, Izz: float,
@@ -76,6 +175,7 @@ def quadrotor(t, states, states_dot, *,
     The code is based in the following references:
     - https://doi.org/10.1016/j.automatica.2009.10.018
     - https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
+    Currently, no aerodynamic effects are considered.
 
     Parameters
     ----------
