@@ -1,6 +1,6 @@
 from typing import Sequence
 import numpy as np
-from numpy import sin, cos
+from numpy import sin, cos, sqrt, log10
 from .common import Const
 
 def double_cart_pendulum(t, x, x_dot, *,
@@ -30,6 +30,9 @@ def double_cart_pendulum(t, x, x_dot, *,
         Length of the first pendulum.
     L2 : float
         Length of the second pendulum.
+
+    Control inputs
+    --------------
     u : float, optional
         Force applied to the cart. Default is 0.0.
     '''
@@ -95,6 +98,9 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     deltas : Sequence[float], optional
         Friction coefficients. The first one corresponds to the friction between the cart and the ground, while the others correspond to the rotational friction of the pendulums.
         Default is None.
+    
+    Control inputs
+    --------------
     u : float, optional
         Force applied to the cart. Default is 0.0.
     '''
@@ -199,6 +205,9 @@ def quadrotor(t, states, states_dot, *,
         Mass of the quadrotor.
     drag : float
         Drag factor of the quadrotor.
+    
+    Control inputs
+    --------------
     u : Sequence[float], optional
         Squared angular velocities of the propellers [w1^2, w2^2, w3^2, w4^2]. Default is [0.0, 0.0, 0.0, 0.0].
     '''
@@ -267,3 +276,170 @@ def quadrotor(t, states, states_dot, *,
     g[9:12] = np.linalg.inv(M) @ (np.array([tau_phi, tau_theta, tau_psi]) - C @ np.array([dphi, dtheta, dpsi])) - np.array([dphi_dot, dtheta_dot, dpsi_dot])
     
     return g
+
+def oil_well(t, x, x_dot, *,
+             T_a, V_a, L_a, K_gs, K_inj,
+             M_G, P_gs,
+             T_t, D_t, L_t, V_t, epsilon, K_pr, P_out,
+             S_bh, L_bh,
+             P_res, avg_w_res, PI, GOR,
+             mu, rho_L,
+             u: Sequence[float]) -> np.ndarray:
+    '''
+    Oil well model based in Jahanshahi's paper (https://doi.org/10.3182/20120710-4-SG-2026.00110).
+
+    Parameters
+    ----------
+    t : float
+        Time.
+    x : Sequence[float]
+        State variables [x0, x1, x2, w_G_in, P_at, P_ab, P_bh, P_tt, w_out, rho_m_tt, alpha_L_tt]. x0 is the gas mass in the annulus, x1 is the gas mass in the tubing, x2 is the liquid mass in the tubing.
+        The other variables are intermediate variables calculated by the model. We don't care about their dynamics.
+    x_dot : Sequence[float]
+        Derivatives of the state variables [x0_dot, x1_dot, x2_dot, *_].
+    
+    Annulus parameters
+    ------------------
+    T_a : float
+        Temperature of the annulus (in K).
+    V_a : float
+        Volume of the annulus (in m^3).
+    L_a : float
+        Length of the annulus (in m).
+    K_gs : float
+        Gas-lift choke coefficient.
+    K_inj : float
+        Injection choke coefficient.
+    
+    Gas properties
+    --------------
+    M_G : float
+        Gas molecular weight (in kg/kmol).
+    P_gs : float
+        Pressure at the gas source (in bars).
+    
+    Tubing parameters
+    -----------------
+    T_t : float
+        Temperature of the tubing (in K).
+    D_t : float
+        Diameter of the tubing (in m).
+    L_t : float
+        Length of the tubing (in m).
+    V_t : float
+        Volume of the tubing (in m^3).
+    epsilon : float
+        Roughness of the tubing (in m).
+    K_pr : float
+        Production choke coefficient.
+    P_out : float
+        Pressure at the wellhead (in bars).
+    
+    Bottom hole parameters
+    ----------------------
+    S_bh : float
+        Bottom hole section area (in m^2).
+    L_bh : float
+        Length of the bottom hole (in m).
+    
+    Reservoir parameters
+    --------------------
+    P_res : float
+        Pressure at the reservoir (in bars).
+    avg_w_res : float
+        Average mass flow from reservoir (in kg/s).
+    PI : float
+        Productivity index (in kg/s/Pa).
+    GOR : float
+        Gas-liquid ratio.
+    
+    Liquid properties
+    -----------------
+    mu : float
+        Viscosity of the liquid (in Pa*s).
+    rho_L : float
+        Density of the liquid (in kg/m^3).
+    
+    Control inputs
+    --------------
+    u : Sequence[float]
+        Opening of chokes (0-1). u0 is the opening of the production choke and u1 is the opening of the gas-lift choke.
+
+    When solving the DAE, if working very close to an equilibrium point, rtol <= 1e-8 is recommended to avoid weird results in the intermediate variables.
+    '''
+
+    R = Const.IDEAL_GAS * 1e6 # J/(kmol*K)
+    g = Const.GRAVITY # m/s^2
+    P_gs *= Const.BAR_2_PASCAL
+    P_out *= Const.BAR_2_PASCAL
+    P_res *= Const.BAR_2_PASCAL
+
+    # ----------------------- Annulus (full of gas) -----------------------
+    P_at = (R * T_a * x[0]) / (M_G * V_a) # Pa at the top of the annulus
+    P_ab = P_at + (x[0] * g * L_a)/V_a # Pa at the bottom of the annulus
+    rho_G_ab = (P_ab * M_G) / (R * T_a) # kg/m^3 at the bottom of the annulus
+    rho_G_in = (P_gs * M_G) / (R * T_a) # kg/m^3 at the gas-lift choke
+    w_G_in = K_gs * u[1] * sqrt(rho_G_in * max(P_gs - P_at, 0)) # kg/s at the gas-lift choke (gas mass flow into the annulus)
+
+    # ----------------------- Tubing (mixture of oil, water and gas) -----------------------
+    rho_G_tt = x[1] / (V_t + S_bh * L_bh - x[2]/rho_L) # kg/m^3 of gas at the top of the tubing
+    avg_rho_t = (x[1] + x[2] - rho_L*S_bh*L_bh) / V_t # average mixture density in the tubing
+    alpha_G_tb_m = GOR / (GOR + 1) # mass fraction of gas at the bottom of the tubing
+    # ... Pressure loss due to friction in the tubing
+    avg_U_sl_t = 4 * (1 - alpha_G_tb_m) * avg_w_res / (rho_L * np.pi * D_t ** 2) # average superficial velocity of liquid phase in the tubing
+    avg_U_sg_t = 4 * (w_G_in + alpha_G_tb_m * avg_w_res) / (rho_G_tt * np.pi * D_t ** 2) # average superficial velocity of gas phase in the tubing
+    avg_U_t = avg_U_sl_t + avg_U_sg_t # average mixture velocity in the tubing
+    Re_t = avg_rho_t * avg_U_t * D_t / mu # Reynolds number in the tubing
+    lambda_t = 1 / (-1.82 * log10((epsilon / D_t / 3.7) ** 1.11 + 6.9 / Re_t)) ** 2 # friction factor in the tubing
+    avg_alpha_L = max((x[2] - rho_L*S_bh*L_bh), 0) / (V_t * rho_L) # average liquid volume fraction in the tubing
+    F_t = (avg_alpha_L * lambda_t * avg_rho_t * avg_U_t ** 2 * L_t) / (2 * D_t) # pressure loss due to friction in the tubing
+    # ... Pressures at top and bottom of the tubing
+    P_tt = (rho_G_tt * R * T_t) / M_G # Pa at the top of the tubing (where oil+water+gas mixture is produced)
+    P_tb = P_tt + avg_rho_t * g * L_t + F_t # Pa at the bottom of the tubing (where gas being injected from the annulus)
+
+    # ----------------------- Bottom hole (full of liquid) ----------------------- 
+    D_bh = np.sqrt(4 * S_bh / np.pi) # diameter in the bottom hole
+    # ... Pressure loss due to friction in the bottom hole
+    avg_U_lb = avg_w_res / (rho_L * S_bh) # liquid velocity at the bottom hole
+    Re_bh = rho_L * avg_U_lb * D_bh / mu # Reynolds number in the bottom hole
+    lambda_b = 1 / (-1.82 * log10((epsilon / D_bh / 3.7) ** 1.11 + 6.9 / Re_bh)) ** 2 # friction factor in the bottom hole
+    F_b = (lambda_b * rho_L * avg_U_lb ** 2 * L_bh) / (2 * D_bh) # pressure loss due to friction in the bottom hole
+    # ... Pressure at the bottom hole
+    P_bh = P_tb + F_b + rho_L * g * L_bh # Pa at the bottom hole
+
+    # ----------------------- Inner flow rates -----------------------
+    w_G_inj = K_inj * sqrt(rho_G_ab * max(P_ab - P_tb, 0)) # kg/s at the bottom of the annulus (gas mass flow into the tubing)
+    w_res = PI*max(P_res - P_bh, 0) # kg/s of liquid at the bottom hole (liquid mass flow into the tubing)
+    w_G_res = alpha_G_tb_m * w_res # kg/s of gas at the bottom hole (gas mass flow into the tubing)
+    w_L_res = (1 - alpha_G_tb_m) * w_res # kg/s of liquid at the bottom hole (liquid mass flow into the tubing)
+
+    # ----------------------- Output flow rates -----------------------
+    rho_G_tb = P_tb * M_G / (R * T_t) # kg/m^3 of gas at the bottom of the tubing
+    alpha_L_tb = (
+        w_L_res * rho_G_tb / (w_L_res * rho_G_tb + (w_G_inj + w_G_res) * rho_L) # volume fraction of liquid at the bottom of the tubing
+        if w_L_res + w_G_inj + w_G_res != 0 else 0 # Avoid division by zero
+    )
+    alpha_L_tt = 2*avg_alpha_L - alpha_L_tb # volume fraction of liquid at the top of the tubing
+    rho_m_tt = alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt # kg/m^3 of mixture at the top of the tubing
+    alpha_G_tt_m = (1 - alpha_L_tt) * rho_G_tt / (alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt) # mass fraction of gas at the top of the tubing
+    w_out = K_pr * u[0] * sqrt(rho_m_tt * max(P_tt - P_out, 0)) # kg/s of mixture at the top of the tubing (total mass flow out of the well)
+    w_G_out = alpha_G_tt_m * w_out # kg/s of gas at the top of the tubing (gas mass flow out of the well)
+    w_L_out = (1 - alpha_G_tt_m) * w_out # kg/s of liquid at the top of the tubing (liquid mass flow out of the well)
+
+    
+    G = np.zeros(11)
+    # ODEs ... Relation between the state variables and their derivatives
+    G[0] = x_dot[0] - (w_G_in - w_G_inj) # gas mass in the annulus
+    G[1] = x_dot[1] - (w_G_inj + w_G_res - w_G_out) # gas mass in the tubing
+    G[2] = x_dot[2] - (w_L_res - w_L_out) # liquid mass in the tubing
+    # Intermediate variables ... All terms in one side of the equations (0 = g(x, z)). We don't care about their dynamics
+    G[3] = x[3] - w_G_in # Inlet gas mass flow rate
+    G[4] = x[4] - P_at / Const.BAR_2_PASCAL # Pressure at the top of the annulus
+    G[5] = x[5] - P_ab / Const.BAR_2_PASCAL # Pressure at the bottom of the annulus
+    G[6] = x[6] - P_bh / Const.BAR_2_PASCAL # Pressure at the bottom hole
+    G[7] = x[7] - P_tt / Const.BAR_2_PASCAL # Pressure at the top of the tubing
+    G[8] = x[8] - w_out # Total mass flow out of the well
+    G[9] = x[9] - rho_m_tt # Mixture density at the top of the tubing
+    G[10] = x[10] - alpha_L_tt # Volume fraction of liquid at the top of the tubing
+
+    return G
