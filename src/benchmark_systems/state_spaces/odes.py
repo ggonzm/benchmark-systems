@@ -20,6 +20,9 @@ def pendulum(t, x, *,
         Length of the pendulum.
     drag : float, optional
         Drag coefficient. Default is 0.0.
+    
+    Control inputs
+    --------------
     u : float, optional
         Torque applied to the pendulum. Default is 0.0.
     '''
@@ -56,6 +59,11 @@ def dc_motor(t, x, *,
         Armature resistance (in Ohm).
     L : float
         Armature inductance (in H).
+    
+    Control inputs
+    --------------
+    u : float, optional
+        Voltage applied to the motor (in V). Default is 0.0.
     '''
 
     # State space
@@ -87,6 +95,9 @@ def cart_pendulum(t, x, *,
         Length of the pendulum.
     drag : float, optional
         Drag coefficient. Default is 0.0.
+
+    Control inputs
+    --------------
     u : float, optional
         Force applied to the cart. Default is 0.0.
     '''
@@ -122,6 +133,9 @@ def spring_mass_damper(t, x, *,
         Spring constants.
     d : Sequence[float]
         Damping coefficients.
+
+    Control inputs
+    --------------
     u : Sequence[float], optional
         Stepper motor angles (in radians). Default is [0.0, 0.0].
     '''
@@ -163,10 +177,15 @@ def johansson(t, h, *,
         Pump constants.
     h_max : Sequence[float]
         Tank saturations (in cm).
+
+    Control inputs
+    --------------
     u : Sequence[float], optional
         Pump setpoints (0-100%). Default is [0.0, 0.0].
     gamma : Sequence[float], optional
         Valve openings (0-1). Default is [0.0, 0.0].
+
+    When solving the initial value problem, rtol <= 1e-6 is recommended in order to ensure tank saturations.
     '''
 
     g = Const.GRAVITY * 100 # cm/s^2
@@ -221,6 +240,9 @@ def batch_bioreactor(t, x, *,
         Yield coefficient of biomass.
     Y_p : float
         Yield coefficient of product.
+
+    Control inputs
+    --------------
     u : float
         Feed flow rate (in m^3/min).
     '''
@@ -310,6 +332,9 @@ def cstr(t, x, *,
         Heat transfer coefficient (in kJ/(m^2*K*h)).
     Ca_in : float
         Concentration of species A in the feed flow (in mol/L).
+
+    Control inputs
+    --------------
     u : Sequence[float], optional
         Inputs [F, dQ]. F is the flow rate (in L/h) and dQ is the heat input (in kW). Default is [0.0, 0.0].
     '''
@@ -374,6 +399,9 @@ def quadrotor(t, states, *,
         Mass of the quadrotor.
     drag : float
         Drag factor of the quadrotor.
+
+    Control inputs
+    --------------
     u : Sequence[float], optional
         Squared angular velocities of the propellers [w1^2, w2^2, w3^2, w4^2]. Default is [0.0, 0.0, 0.0, 0.0].
     '''
