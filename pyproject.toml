@@ -1,6 +1,6 @@
 [project]
 name = "benchmark-systems"
-version = "0.1.0"
+version = "0.4.0"
 description = "Open collection of model predictive control (MPC) benchmarking problems"
 authors = [
     {name = "Guzmán", email = "ggonzm@unileon.es"},
@@ -18,7 +18,9 @@ build-backend = "pdm.backend"
 [tool.pdm]
 distribution = true
 
+
+
 [dependency-groups]
-test = [
-    "matplotlib>=3.9.3",
+dev = [
+    "matplotlib>=3.10.0",
 ]
