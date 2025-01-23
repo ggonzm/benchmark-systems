@@ -90,3 +90,10 @@ axs[-1].set_xlabel('Time (s)')
 
 ## Models
 All model simulations are available in the `examples` folder as a Jupyter notebook.
+
+# Installation
+Currently, a prerelease version is available via TestPypi:
+
+```bash
+pip install -i https://test.pypi.org/simple/ benchmark-systems
+```
