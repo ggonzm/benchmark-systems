@@ -1,0 +1,23 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: benchmark-systems
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Guzmán
+    family-names: González
+    email: ggonzm@unileon.es
+    affiliation: University of León
+    orcid: 'https://orcid.org/0000-0002-2130-7867'
+  - name: SUPPRESS Research Group
+repository-code: 'https://github.com/suppress-unileon/benchmark-systems'
+abstract: >-
+  Open collection of benchmark problems. The goal is to
+  provide a common set of models to test and compare
+  different control algorithms. These models have been used
+  by the control community in many different
+  implementations.
