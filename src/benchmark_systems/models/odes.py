@@ -114,10 +114,10 @@ def cart_pendulum(t, x, *,
     return dx 
 
 
-def spring_mass_damper(t, x, *,
+def multimass_spring(t, x, *,
                        I: Sequence[float], K: Sequence[float], d: Sequence[float], u: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
     '''
-    Spring-mass-damper expressions obtained from Euler-Lagrange equations.
+    System of N discs connected via springs. The two outermost discs are each connected to a stepper motor with additional springs.
     The equations are equivalent to the ones presented in https://www.do-mpc.com/en/latest/getting_started.html
 
     Parameters
