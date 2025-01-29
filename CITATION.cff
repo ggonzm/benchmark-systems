@@ -14,6 +14,7 @@ authors:
     affiliation: University of León
     orcid: 'https://orcid.org/0000-0002-2130-7867'
   - name: SUPPRESS Research Group
+year: 2025
 repository-code: 'https://github.com/suppress-unileon/benchmark-systems'
 abstract: >-
   Open collection of benchmark problems. The goal is to
