@@ -336,7 +336,7 @@ def cstr(t, x, *,
     Control inputs
     --------------
     u : Sequence[float], optional
-        Inputs [F, dQ]. F is the flow rate (in L/h) and dQ is the heat input (in kW). Default is [0.0, 0.0].
+        Inputs [F, dQ]. F is the normalized inlet flow (in L/h) and dQ is the heat removed by the coolant (in kW). Default is [0.0, 0.0].
     '''
 
     Ca, Cb, Tr, Tk = x

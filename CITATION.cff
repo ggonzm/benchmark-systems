@@ -13,7 +13,21 @@ authors:
     email: ggonzm@unileon.es
     affiliation: University of León
     orcid: 'https://orcid.org/0000-0002-2130-7867'
-  - name: SUPPRESS Research Group
+  - given-names: Antonio
+    family-names: Morán
+    email: a.moran@unileon.es
+    affiliation: University of León
+    orcid: 'https://orcid.org/0000-0002-2762-6949'
+  - given-names: Miguel Ángel
+    family-names: Prada Medrano
+    email: ma.prada@unileon.es
+    affiliation: University of León
+    orcid: 'https://orcid.org/0000-0002-1563-1556'
+  - given-names: Manuel
+    family-names: Dominguez Gonzalez
+    email: mdomg@unileon.es
+    affiliation: University of León
+    orcid: 'https://orcid.org/0000-0002-3921-1599'
 year: 2025
 repository-code: 'https://github.com/suppress-unileon/benchmark-systems'
 abstract: >-
