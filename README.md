@@ -54,13 +54,17 @@ For example, the model of a quadrotor can be expressed as a DAE or an ODE:
 
 ###### Image source: https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
 
-* Newton-Euler model (ODE)
-    States: $x = \begin{bmatrix} x \ y \ z \ \phi \ \theta \ \psi \ s \ v \ w \ p \ q \ r \end{bmatrix}^T$; 
+* Newton-Euler model (ODE) States:
 
-* Euler-Lagrange model (DAE)
-    States: $x = \begin{bmatrix} x \ y \ z \ \phi \ \theta \ \psi \ \dot{x} \ \dot{y} \ \dot{z} \ \dot{\phi} \ \dot{\theta} \ \dot{\psi} \end{bmatrix}^T$;
+   <img src="https://latex.codecogs.com/svg.image?$x=\begin{bmatrix}x\;y\;z\;\phi\;\theta\;\psi\;s\;v\;w\;p\;q\;r\end{bmatrix}^T$">
 
-Control actions: $u = \begin{bmatrix} \omega_1^2 \ \omega_2^2 \ \omega_3^2 \ \omega_4^2 \end{bmatrix}^T$
+* Euler-Lagrange model (DAE) States:
+
+   <img src="https://latex.codecogs.com/svg.image?$x=\begin{bmatrix}x\;y\;z\;\phi\;\theta\;\psi\;\dot{x}\;\dot{y}\;\dot{z}\;\dot{\phi}\;\dot{\theta}\;\dot{\psi}\end{bmatrix}^T$">
+
+Control actions:
+
+  <img src="https://latex.codecogs.com/svg.image?$u=\begin{bmatrix}\omega_1^2\;\omega_2^2\;\omega_3^2\;\omega_4^2\end{bmatrix}^T$">
 
 ```python
 quadrotor_params = {
