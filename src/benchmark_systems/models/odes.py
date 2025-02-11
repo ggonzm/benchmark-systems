@@ -1,12 +1,13 @@
 from typing import Sequence
 import numpy as np
 from numpy import sin, cos, exp, sqrt
-from .common import Const
+from .common import Const, _cyclic
 
 def pendulum(t, x, *,
              m: float, L: float, drag: float = 0.0, u: float = 0.0) -> np.ndarray:
     '''
     Just a humble pendulum.
+    As theta is a cyclic variable, it is ensured to be within the range [-pi, pi]
 
     Parameters
     ----------
@@ -29,6 +30,9 @@ def pendulum(t, x, *,
 
     g = Const.GRAVITY
 
+    # Ensure theta is within [-pi, pi]
+    x[0] = _cyclic(x[0], (-np.pi, np.pi))
+
     # State space
     dx = np.zeros(2)
     dx[0] = x[1]
@@ -40,6 +44,7 @@ def dc_motor(t, x, *,
              J: float, b: float, Ke: float, Kt: float,  R: float, L: float, u: float = 0.0) -> np.ndarray:
     '''
     DC motor expressions obtained from Newton's second law and Kirchhoff's voltage law.
+    As theta is a cyclic variable, it is ensured to be within the range [-pi, pi]
 
     Parameters
     ----------
@@ -66,6 +71,9 @@ def dc_motor(t, x, *,
         Voltage applied to the motor (in V). Default is 0.0.
     '''
 
+    # Ensure theta is within [-pi, pi]
+    x[0] = _cyclic(x[0], (-np.pi, np.pi))
+
     # State space
     dx = np.zeros(3)
     dx[0] = x[1]
@@ -80,6 +88,7 @@ def cart_pendulum(t, x, *,
     Cart-pendulum expressions obtained from Euler-Lagrange equations and Rayleigh dissipation equation.
     No inertia is considered and the mass of the pendulum is concentrated in its end.
     The model can be derived following Steve Brunton's Control Bootcamp.
+    As theta is a cyclic variable, it is ensured to be within the range [-pi, pi]
 
     Parameters
     ----------
@@ -104,6 +113,9 @@ def cart_pendulum(t, x, *,
     den = -M + m*cos(x[2])**2 - m
     g = Const.GRAVITY
 
+    # Ensure theta is within [-pi, pi]
+    x[2] = _cyclic(x[2], (-np.pi, np.pi))
+
     # State space
     dx = np.zeros(4)
     dx[0] = x[1]
@@ -118,7 +130,8 @@ def multimass_spring(t, x, *,
                        I: Sequence[float], K: Sequence[float], d: Sequence[float], u: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
     '''
     System of N discs connected via springs. The two outermost discs are each connected to a stepper motor with additional springs.
-    The equations are equivalent to the ones presented in https://www.do-mpc.com/en/latest/getting_started.html
+    The equations are equivalent to the ones presented in https://www.do-mpc.com/en/latest/getting_started.html.
+    As thetas are cyclic variables, they are ensured to be within the range [-pi, pi]
 
     Parameters
     ----------
@@ -141,6 +154,9 @@ def multimass_spring(t, x, *,
     '''
 
     n = len(I) # Number of masses
+
+    # Ensure thetas are within [-pi, pi]
+    x[:n] = _cyclic(x[:n], (-np.pi, np.pi))
 
     # State space
     dx = np.zeros(2*n)
