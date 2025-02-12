@@ -20,9 +20,13 @@ def pendulum(t, x, *,
              m: float, L: float, drag: float = 0.0, u: float = 0.0) -> np.ndarray:
     '''
     Just a humble pendulum.
+    As theta is a cyclic variable, it is ensured to be within the range [-pi, pi]
     '''
 
     g = Const.GRAVITY
+
+    # Ensure theta is within [-pi, pi]
+    x[0] = _cyclic(x[0], (-np.pi, np.pi))
 
     # State space
     dx = np.zeros(2)
@@ -55,12 +59,12 @@ For example, the model of a quadrotor can be expressed as a DAE or an ODE:
 ###### Image source: https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
 
 * Newton-Euler model (ODE)
-    States: $x = \begin{bmatrix} x \ y \ z \ \phi \ \theta \ \psi \ s \ v \ w \ p \ q \ r \end{bmatrix}^T$; 
+    States: $x = [x \ y \ z \ \phi \ \theta \ \psi \ s \ v \ w \ p \ q \ r]^T$; 
 
 * Euler-Lagrange model (DAE)
-    States: $x = \begin{bmatrix} x \ y \ z \ \phi \ \theta \ \psi \ \dot{x} \ \dot{y} \ \dot{z} \ \dot{\phi} \ \dot{\theta} \ \dot{\psi} \end{bmatrix}^T$;
+    States: $x = [x \ y \ z \ \phi \ \theta \ \psi \ \dot{x} \ \dot{y} \ \dot{z} \ \dot{\phi} \ \dot{\theta} \ \dot{\psi} ]^T$;
 
-Control actions: $u = \begin{bmatrix} \omega_1^2 \ \omega_2^2 \ \omega_3^2 \ \omega_4^2 \end{bmatrix}^T$
+Control actions: $u = [\omega_1^2 \ \omega_2^2 \ \omega_3^2 \ \omega_4^2 ]^T$
 
 ```python
 quadrotor_params = {
