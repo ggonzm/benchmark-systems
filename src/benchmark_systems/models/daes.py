@@ -1,7 +1,7 @@
 from typing import Sequence
 import numpy as np
 from numpy import sin, cos, sqrt, log10
-from .common import Const, _cyclic
+from .common import Const
 
 def double_cart_pendulum(t, x, x_dot, *,
                          M: float, m1: float, m2: float, L1: float, L2: float, u: float = 0.0) -> np.ndarray:
@@ -11,7 +11,6 @@ def double_cart_pendulum(t, x, x_dot, *,
     substituting theta1 and theta2 by pi - theta1 and pi - theta2, respectively.
     The masses of the pendulums are considered to be concentrated in the middle of the bars.
     No frictions are considered.
-    As thetas are cyclic variables, they are ensured to be within the range [-pi, pi]
 
     Parameters
     ----------
@@ -55,10 +54,6 @@ def double_cart_pendulum(t, x, x_dot, *,
     p6 = m2*l2**2 + J2
     p7 = (m1*l1 + m2*L1) * g
     p8 = m2*l2*g
-
-    # Ensure theta1 and theta2 are within the range [-pi, pi]
-    theta1 = _cyclic(theta1, (-np.pi, np.pi))
-    theta2 = _cyclic(theta2, (-np.pi, np.pi))
     
     G = np.zeros(6)
     # ODEs ... Relation between the state variables and their derivatives
@@ -84,7 +79,6 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     for the N-level inverted pendulum, substituting thetaN by pi - thetaN.
     The masses of the pendulums are considered to be concentrated in the middle of the bars.
     The frictions of the cart and pendulums can be considered.
-    As thetas are cyclic variables, they are ensured to be within the range [-pi, pi].
 
     Parameters
     ----------
@@ -118,9 +112,6 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     l = [L[i]/2 for i in range(npendulums)] # Half of the length of the pendulums
     J = [(m[i] * l[i]**2) / 3 for i in range(npendulums)] # Inertia of the pendulums
     f = np.abs(np.array(deltas) @ np.array([[dx], omegas])) if deltas is not None else [0.0]*(1+npendulums) # Friction forces ... Proportional to the velocities
-
-    # Ensure thetas are within the range [-pi, pi]
-    thetas = _cyclic(thetas, (-np.pi, np.pi))
 
     # Model coefficients
     a0 = M + sum(m)
