@@ -20,13 +20,9 @@ def pendulum(t, x, *,
              m: float, L: float, drag: float = 0.0, u: float = 0.0) -> np.ndarray:
     '''
     Just a humble pendulum.
-    As theta is a cyclic variable, it is ensured to be within the range [-pi, pi]
     '''
 
     g = Const.GRAVITY
-
-    # Ensure theta is within [-pi, pi]
-    x[0] = _cyclic(x[0], (-np.pi, np.pi))
 
     # State space
     dx = np.zeros(2)
