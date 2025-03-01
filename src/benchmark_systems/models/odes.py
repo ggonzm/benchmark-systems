@@ -32,7 +32,7 @@ def pendulum(t, x, *,
     # State space
     dx = np.zeros(2)
     dx[0] = x[1]
-    dx[1] = -g/L * sin(x[0]) - drag/m*x[1] + 1/(m*L**2)*u
+    dx[1] = -g/L * sin(x[0]) - drag/(m*L**2)*x[1] + 1/(m*L**2)*u
 
     return dx
 
