@@ -1,6 +1,6 @@
 [project]
 name = "benchmark-systems"
-version = "0.7.0"
+version = "0.8.0"
 description = "Open collection of model predictive control (MPC) benchmarking problems"
 authors = [
     {name = "Guzmán", email = "ggonzm@unileon.es"},
