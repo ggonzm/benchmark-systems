@@ -12,7 +12,8 @@ from .daes import (
     double_cart_pendulum,
     multilevel_cart_pendulum,
     quadrotor as quadrotor_dae,
-    oil_well
+    oil_well,
+    neutralization
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "multilevel_cart_pendulum",
     "quadrotor_dae",
     "oil_well",
+    "neutralization",
 ]

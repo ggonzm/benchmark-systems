@@ -442,3 +442,81 @@ def oil_well(t, x, x_dot, *,
     G[10] = x[10] - alpha_L_tt # Volume fraction of liquid at the top of the tubing
 
     return G
+
+def neutralization(t, x, x_dot, *,
+                   A: float, z: float, Cv4: float, n: float,
+                   Wa1: float, Wa2: float, Wa3: float,
+                   Wb1: float, Wb2: float, Wb3: float,
+                   pK1: float, pK2: float,
+                   q1: float, d: float, u: float) -> np.ndarray:
+    '''
+    Continuous stirred-tank reactor for pH neutralization. The model is based in the paper https://doi.org/10.1109/LCSYS.2019.2920720, which also 
+    refers to https://doi.org/10.23919/ACC.1989.4790490.
+
+    The model consists of a buffer tank and a reactor. Three flows enter the reactor: the acid stream (q1), the buffer stream (q2), and the alkaline stream (q3).
+    Another flow leaves the reactor (q4), from which the pH is measured. The dynamics of acid stream are fast enough to consider it constant, while the alkaline 
+    stream is the valve-regulated control input (u=q3), and the buffer stream acts as a disturbance (d=q2).
+    The original paper studies two reaction invariant concentrations (Wa, Wb) along the model, which refer to the dissociation of H2CO3 in water. Concentrations
+    in some streams may take negative values in order to represent the consumption or contribution to the species used to calculate the invariant concentrations.
+
+    Parameters
+    ----------
+    t : float
+        Time.
+    x : Sequence[float]
+        State variables [Wa4, Wb4, h, pH]. Wa4 and Wb4 are the ion concentrations in the outlet stream, h is the height of the liquid in the reactor, and
+        pH is the pH of the outlet stream.
+    x_dot : Sequence[float]
+        Derivatives of the state variables [dWa4, dWb4, dh1, dpH]. pH is modeled as an algebraic variable, so dpH has no meaning.
+    
+    Reactor parameters
+    ------------------
+    A : float
+        Cross-sectional area of the tank (in cm^2).
+    z : float
+        Vertical distance between the bottom of the reactor and the pH sensor (in cm).
+    Cv4 : float
+        Height-output flow rate coefficient.
+    n : float
+        Exponent of the height.
+    
+    Reaction invariant concentrations
+    ---------------------------------
+    Wa_i : float
+        Reaction invariant concentration a in the i-th stream (in mol/L).
+    Wb_i : float
+        Reaction invariant concentration b in the i-th stream (in mol/L).
+    
+    Dissociation constants
+    ----------------------
+    pK1 : float
+        First dissociation constant of the weak acid.
+    pK2 : float
+        Second dissociation constant of the weak acid.
+    
+    Inlet flows
+    -----------
+    q1 : float
+        Acid stream flow rate (in L/s). Constant.
+    d : float
+        Buffer stream flow rate (in L/s). Disturbance.
+
+    Control inputs
+    --------------
+    u : float
+        Alkaline stream flow rate (in L/s). Valve-regulated.
+    '''
+
+    Wa4, Wb4, h, pH = x
+
+    f1 = np.array([q1*(Wa1 - Wa4) / h, q1*(Wb1 - Wb4) / h, q1 - Cv4*(h + z)**n])
+    f2 = np.array([(Wa3 - Wa4) / h, (Wb3 - Wb4) / h, 1])
+    f3 = np.array([(Wa2 - Wa4)/ h, (Wb2 - Wb4) / h, 1])
+
+    G = np.zeros(4)
+    # State space equations
+    G[:3] = x_dot[:3] - (f1 + u*f2 + d*f3) / A
+    # Constraint to model pH
+    G[3] = Wa4 + 10**(pH - 14) + Wb4*(1 + 2*10**(pH - pK2))/(1 + 10**(pK1 - pH) + 10**(pH - pK2)) - 10**(-pH)
+
+    return G
