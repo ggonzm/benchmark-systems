@@ -115,7 +115,7 @@ def cart_pendulum(t, x, *,
 
 
 def multimass_spring(t, x, *,
-                       I: Sequence[float], K: Sequence[float], d: Sequence[float], u: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
+                       tau: Sequence[float], I: Sequence[float], K: Sequence[float], d: Sequence[float], u: Sequence[float] = [0.0, 0.0]) -> np.ndarray:
     '''
     System of N discs connected via springs. The two outermost discs are each connected to a stepper motor with additional springs.
     The equations are equivalent to the ones presented in https://www.do-mpc.com/en/latest/getting_started.html.
@@ -125,8 +125,11 @@ def multimass_spring(t, x, *,
     t : float
         Time.
     x : Sequence[float]
-        State variables [theta1, theta2 ... thetaN, omega1, omega2 ... omegaN]. ThetaN is the position (in radians) of the N-th mass,
-        and omegaN is the velocity (in rad/s) of the N-th mass.
+        State variables [u1_true, u2_true, theta1, theta2 ... thetaN, omega1, omega2 ... omegaN].
+        u1_true is the position (in radians) of the left stepper motor, u2_true is the position (in radians) of the right stepper motor,
+        ThetaN is the position (in radians) of the N-th mass, and omegaN is the velocity (in rad/s) of the N-th mass.
+    tau : Sequence[float]
+        Time constants of the motors.
     I : Sequence[float]
         Inertia of the masses.
     K : Sequence[float]
@@ -137,23 +140,28 @@ def multimass_spring(t, x, *,
     Control inputs
     --------------
     u : Sequence[float], optional
-        Stepper motor angles (in radians). Default is [0.0, 0.0].
+        Stepper motor setpoint (in radians). Default is [0.0, 0.0].
     '''
 
     n = len(I) # Number of masses
+    u_true = x[:2] # True positions of the motors
+    x = x[2:] # Mass positions and velocities
 
     # State space
+    du = np.zeros(2)
     dx = np.zeros(2*n)
+    for i in range(2):
+        du[i] = (u[i] - u_true[i]) / tau[i] # Motor dynamics
     for i in range(n):
         dx[i] = x[i+n] # dTheta/dt = omega
         if i == 0: # First acceleration equation
-            dx[i+n] = (-K[i]*(x[i] - u[0]) - K[i+1]*(x[i] - x[i+1]) - d[i]*x[i+n]) / I[i]
+            dx[i+n] = (-K[i]*(x[i] - u_true[0]) - K[i+1]*(x[i] - x[i+1]) - d[i]*x[i+n]) / I[i]
         elif i == n-1: # Last acceleration equation
-            dx[i+n] = (-K[i]*(x[i] - x[i-1]) - K[i+1]*(x[i] - u[-1]) - d[i]*x[i+n]) / I[i]
+            dx[i+n] = (-K[i]*(x[i] - x[i-1]) - K[i+1]*(x[i] - u_true[-1]) - d[i]*x[i+n]) / I[i]
         else: # Acceleration equations for the masses in between
             dx[i+n] = (-K[i]*(x[i] - x[i-1]) - K[i+1]*(x[i] - x[i+1]) - d[i]*x[i+n]) / I[i]
 
-    return dx
+    return np.concatenate((du, dx))
 
 def johansson(t, h, *, 
               A: Sequence[float], a: Sequence[float], K: Sequence[float], h_max: Sequence[float],
