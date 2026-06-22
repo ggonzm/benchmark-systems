@@ -1,7 +1,7 @@
 from typing import Sequence
 import numpy as np
 from numpy import sin, cos, exp, sqrt
-from .common import Const
+from ..common import Const
 
 def pendulum(t, x, *,
              m: float, L: float, drag: float = 0.0, u: float = 0.0) -> np.ndarray:

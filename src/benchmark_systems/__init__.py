@@ -1,3 +1,3 @@
-from . import models
+from .models import *
 
-__all__ = ['models']
+__version__ = '1.0.4'

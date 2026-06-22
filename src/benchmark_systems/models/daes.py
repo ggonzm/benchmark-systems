@@ -1,7 +1,7 @@
 from typing import Sequence
 import numpy as np
 from numpy import sin, cos, sqrt, log10
-from .common import Const
+from ..common import Const
 
 def double_cart_pendulum(t, x, x_dot, *,
                          M: float, m1: float, m2: float, L1: float, L2: float, u: float = 0.0) -> np.ndarray:
@@ -378,7 +378,7 @@ def oil_well(t, x, x_dot, *,
     P_ab = P_at + (x[0] * g * L_a)/V_a # Pa at the bottom of the annulus
     rho_G_ab = (P_ab * M_G) / (R * T_a) # kg/m^3 at the bottom of the annulus
     rho_G_in = (P_gs * M_G) / (R * T_a) # kg/m^3 at the gas-lift choke
-    w_G_in = K_gs * u[1] * sqrt(rho_G_in * max(P_gs - P_at, 0)) # kg/s at the gas-lift choke (gas mass flow into the annulus)
+    w_G_in = K_gs * u[1] * sqrt(rho_G_in * max(P_gs - P_at, Const.ZERO)) # kg/s at the gas-lift choke (gas mass flow into the annulus)
 
     # ----------------------- Tubing (mixture of oil, water and gas) -----------------------
     rho_G_tt = x[1] / (V_t + S_bh * L_bh - x[2]/rho_L) # kg/m^3 of gas at the top of the tubing
@@ -407,8 +407,8 @@ def oil_well(t, x, x_dot, *,
     P_bh = P_tb + F_b + rho_L * g * L_bh # Pa at the bottom hole
 
     # ----------------------- Inner flow rates -----------------------
-    w_G_inj = K_inj * sqrt(rho_G_ab * max(P_ab - P_tb, 0)) # kg/s at the bottom of the annulus (gas mass flow into the tubing)
-    w_res = PI*max(P_res - P_bh, 0) # kg/s of liquid at the bottom hole (liquid mass flow into the tubing)
+    w_G_inj = K_inj * sqrt(rho_G_ab * max(P_ab - P_tb, Const.ZERO)) # kg/s at the bottom of the annulus (gas mass flow into the tubing)
+    w_res = PI*max(P_res - P_bh, Const.ZERO) # kg/s of liquid at the bottom hole (liquid mass flow into the tubing)
     w_G_res = alpha_G_tb_m * w_res # kg/s of gas at the bottom hole (gas mass flow into the tubing)
     w_L_res = (1 - alpha_G_tb_m) * w_res # kg/s of liquid at the bottom hole (liquid mass flow into the tubing)
 
@@ -421,7 +421,7 @@ def oil_well(t, x, x_dot, *,
     alpha_L_tt = 2*avg_alpha_L - alpha_L_tb # volume fraction of liquid at the top of the tubing
     rho_m_tt = alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt # kg/m^3 of mixture at the top of the tubing
     alpha_G_tt_m = (1 - alpha_L_tt) * rho_G_tt / (alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt) # mass fraction of gas at the top of the tubing
-    w_out = K_pr * u[0] * sqrt(rho_m_tt * max(P_tt - P_out, 0)) # kg/s of mixture at the top of the tubing (total mass flow out of the well)
+    w_out = K_pr * u[0] * sqrt(rho_m_tt * max(P_tt - P_out, Const.ZERO)) # kg/s of mixture at the top of the tubing (total mass flow out of the well)
     w_G_out = alpha_G_tt_m * w_out # kg/s of gas at the top of the tubing (gas mass flow out of the well)
     w_L_out = (1 - alpha_G_tt_m) * w_out # kg/s of liquid at the top of the tubing (liquid mass flow out of the well)
 
