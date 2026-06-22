@@ -122,8 +122,7 @@ B = jac_quadrotor['jac_dx_u']
 ```
 Selecting the first 6 states (xyz and roll-pitch-yaw) as the output of the system, we obtain an output matrix $C$ that renders the system observable:
 ```math
-\dot{x} = A x + B u \\
-y = C x
+\dot{x} = A x + B u \\\\ y = C x
 ```
 ```python
 C = np.zeros((6, 12)) # Output matrix
@@ -131,8 +130,7 @@ C[:6, :6] = np.eye(6) # Position and angles are measured, but not velocities
 ```
 And finally, we can construct the optimal $K$ matrix for a linear quadratic regulator (LQR) controller:
 ```math
-K = \arg\min_K \int_0^\infty (x^T C^T Q C x + u^T R u) dt \\
-\qquad \text{s. t.} \quad \dot{x} = A x + B u, \quad u = -K x
+K = \arg\min_K \int_0^\infty (x^T C^T Q C x + u^T R u) dt \\\\ \qquad \text{s. t.} \quad \dot{x} = A x + B u, \quad u = -K x
 ```
 ```python
 from control import lqr
