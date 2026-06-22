@@ -111,7 +111,9 @@ u = 4*[w2] # Hover
 quadrotor_fn = quadrotor_ode(**quadrotor_params)
 ```
 Then, using `casadi` functionalities, one can compute the Jacobian matrices of the system, in order to obtain the following linearized model around the hover equilibrium point:
-$$ \dot{x} = A x + B u $$
+```math
+\dot{x} = A x + B u
+```
 
 ```python
 jac_quadrotor = quadrotor_fn.jacobian()(t=0.0, x=[0, 0, 5] + 9*[0], u=u)
@@ -119,15 +121,19 @@ A = jac_quadrotor['jac_dx_x']
 B = jac_quadrotor['jac_dx_u']
 ```
 Selecting the first 6 states (xyz and roll-pitch-yaw) as the output of the system, we obtain an output matrix $C$ that renders the system observable:
-$$ \dot{x} = A x + B u $$
-$$ y = C x $$
+```math
+\dot{x} = A x + B u \\
+y = C x
+```
 ```python
 C = np.zeros((6, 12)) # Output matrix
 C[:6, :6] = np.eye(6) # Position and angles are measured, but not velocities
 ```
 And finally, we can construct the optimal $K$ matrix for a linear quadratic regulator (LQR) controller:
-$$ K = \arg\min_K \int_0^\infty (x^T C^T Q C x + u^T R u) dt $$
-$$ \text{s. t.} \quad \dot{x} = A x + B u, \quad u = -K x $$
+```math
+K = \arg\min_K \int_0^\infty (x^T C^T Q C x + u^T R u) dt \\
+\qquad \text{s. t.} \quad \dot{x} = A x + B u, \quad u = -K x
+```
 ```python
 from control import lqr
 # LQR weights
@@ -137,7 +143,11 @@ R = np.diag([1, 1, 1, 1]) # Control cost matrix
 K, *_ = lqr(A, B, C.T @ Q @ C, R)
 ```
 At this point, one can simulate the closed-loop system:
-$$ \dot{x} = f(x, u_{eq} +\delta u) = f\big(x, u_{eq} - K (x - x_{ref})\big) $$
+
+```math
+\dot{x} = f(x, u_{eq} +\delta u) = f\big(x, u_{eq} - K (x - x_{ref})\big)
+```
+
 ```python
 import casadi as ca
 x = ca.SX.sym('x', 12)
@@ -204,11 +214,6 @@ for ref in refs:
 The package also provides a simple way to animate the simulations. For example, the quadrotor simulation can be animated as follows:
 
 ```python
-%matplotlib Tk
-if 'quadrotor' in globals():
-    plt.close('quadrotor')
-fig = plt.figure('quadrotor', figsize=(14, 14))
-
 # 4 subplots
 axis_3d = fig.add_subplot(221, projection='3d')
 axis_3d.set_position([0.0, 0.45, 0.55, 0.55])  # [left, bottom, width, height]
