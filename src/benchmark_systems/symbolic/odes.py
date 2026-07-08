@@ -25,6 +25,7 @@ Typical usage
 
 from typing import Sequence
 import casadi as ca
+from casadi import sin, cos, exp, sqrt
 from ..common import Const
 
 # ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ def pendulum(*, m: float, L: float, drag: float = 0.0) -> ca.Function:
 
     dx = ca.vertcat(
         omega,
-        -Const.GRAVITY / L * ca.sin(theta) - drag / (m * L**2) * omega + 1 / (m * L**2) * u
+        -Const.GRAVITY / L * sin(theta) - drag / (m * L**2) * omega + 1 / (m * L**2) * u
     )
     return ca.Function('pendulum', [t, x, u], [dx],
                        ['t', 'x', 'u'], ['dx'])
@@ -110,17 +111,74 @@ def cart_pendulum(*, m: float, M: float, L: float, drag: float = 0.0) -> ca.Func
 
     dx = ca.vertcat(
         vel,
-        (-L * m * omega**2 * ca.sin(theta) + drag * vel
-         - Const.GRAVITY * m * ca.sin(theta) * ca.cos(theta) - u) / den,
+        (-L * m * omega**2 * sin(theta) + drag * vel
+         - Const.GRAVITY * m * sin(theta) * cos(theta) - u) / den,
         omega,
-        (L * m * omega**2 * ca.sin(theta) * ca.cos(theta)
-         - drag * vel * ca.cos(theta)
-         + (M + m) * Const.GRAVITY * ca.sin(theta)
-         + u * ca.cos(theta)) / (L * den),
+        (L * m * omega**2 * sin(theta) * cos(theta)
+         - drag * vel * cos(theta)
+         + (M + m) * Const.GRAVITY * sin(theta)
+         + u * cos(theta)) / (L * den),
     )
     return ca.Function('cart_pendulum', [t, x, u], [dx],
                        ['t', 'x', 'u'], ['dx'])
 
+# ---------------------------------------------------------------------------
+# Furuta Pendulum
+# ---------------------------------------------------------------------------
+
+def furuta_pendulum(*,
+                    m1: float, L1: float, J1: float, b1: float,
+                    m2: float, L2: float, J2: float, b2: float,
+                    l1: float|None = None, l2 : float|None = None,
+                    K: float) -> ca.Function:
+    """
+    Furuta pendulum (rotary inverted pendulum).
+
+    States : [theta1, theta2, omega1, omega2]   (theta2=pi → pointing up)
+    Inputs : u – DC Voltage (V)
+    """
+
+    # center of mass of the arms ... If l1 and l2 are not provided, they are assumed to be at the middle and at the end of the arms, respectively.
+    if l1 is None:
+        l1 = L1 / 2
+    else:
+        assert l1 <= L1, "l1 must be less than or equal to L1"
+    if l2 is None:
+        l2 = L2
+    else:
+        assert l2 <= L2, "l2 must be less than or equal to L2"
+    
+    t  = _sym('t')
+    x  = _sym('x', 4)
+    u_sym  = _sym('u')
+
+    theta1, theta2, omega1, omega2 = x[0], x[1], x[2], x[3]
+
+    # Total moments of inertia
+    J1_hat = J1 + m1*l1**2 # Arm 1
+    J2_hat = J2 + m2*l2**2 # Arm 2
+    J0_hat = J1_hat + m2*L1**2 # motor rotor when pendulum is pointing down
+    
+    # alpha, beta, gamma, w0, cp1, cp2, Delta parameters
+    alpha = (m2*L1*l2)/J2_hat
+    beta = J0_hat/J2_hat
+    gamma = K/(m2*Const.GRAVITY*l2)
+    w0 = (m2*Const.GRAVITY*l2/J2_hat)**0.5
+    cp1 = b1/J2_hat
+    cp2 = b2/J2_hat
+    Delta = beta + sin(theta2)**2 + alpha**2*cos(theta2)**2
+
+    dx = ca.vertcat(
+        omega1,
+        omega2,
+        (1/Delta) * (gamma*w0**2*u_sym + 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
+                    - omega1**2*alpha*sin(theta2)*cos(theta2)**2 - omega2*cp2*alpha*cos(theta2) - alpha*w0**2*sin(theta2)*cos(theta2)),
+        (1/Delta) * (alpha*w0**2*u_sym*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 - omega1*cp1*alpha*cos(theta2)
+                    + omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta - sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
+                    - (beta + sin(theta2)**2)*omega2*cp2 - beta*w0**2*sin(theta2) - w0**2*sin(theta2)**3)
+    )
+    return ca.Function('furuta_pendulum', [t, x, u_sym], [dx],
+                       ['t', 'x', 'u'], ['dx'])
 
 # ---------------------------------------------------------------------------
 # Multimass Spring
@@ -202,10 +260,10 @@ def johansson(*,
     h_clip = [ca.fmax(h[i], 0.0) for i in range(4)]
 
     dh = ca.vertcat(
-        -(a[0] / A[0]) * ca.sqrt(2 * g * h_clip[0]) + (a[2] / A[0]) * ca.sqrt(2 * g * h_clip[2]) + (1 - gamma[0]) * K[0] * pumps[0] / A[0],
-        -(a[1] / A[1]) * ca.sqrt(2 * g * h_clip[1]) + (a[3] / A[1]) * ca.sqrt(2 * g * h_clip[3]) + (1 - gamma[1]) * K[1] * pumps[1] / A[1],
-        -(a[2] / A[2]) * ca.sqrt(2 * g * h_clip[2]) + gamma[1] * K[1] * pumps[1] / A[2],
-        -(a[3] / A[3]) * ca.sqrt(2 * g * h_clip[3]) + gamma[0] * K[0] * pumps[0] / A[3],
+        -(a[0] / A[0]) * sqrt(2 * g * h_clip[0]) + (a[2] / A[0]) * sqrt(2 * g * h_clip[2]) + (1 - gamma[0]) * K[0] * pumps[0] / A[0],
+        -(a[1] / A[1]) * sqrt(2 * g * h_clip[1]) + (a[3] / A[1]) * sqrt(2 * g * h_clip[3]) + (1 - gamma[1]) * K[1] * pumps[1] / A[1],
+        -(a[2] / A[2]) * sqrt(2 * g * h_clip[2]) + gamma[1] * K[1] * pumps[1] / A[2],
+        -(a[3] / A[3]) * sqrt(2 * g * h_clip[3]) + gamma[0] * K[0] * pumps[0] / A[3],
     )
 
     # If tanks are full, the can only be emptied (dh<0) or remain full (dh=0)
@@ -285,9 +343,9 @@ def cstr(*,
     Ca_s = ca.fmax(Ca, Const.ZERO)
     Cb_s = ca.fmax(Cb, Const.ZERO)
 
-    k1 = K0_ab * ca.exp(-Ea_ab / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
-    k2 = K0_bc * ca.exp(-Ea_bc / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
-    k3 = K0_ad * ca.exp(-Ea_ad / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k1 = K0_ab * exp(-Ea_ab / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k2 = K0_bc * exp(-Ea_bc / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
+    k3 = K0_ad * exp(-Ea_ad / ((Tr + Const.KELVIN) * Const.IDEAL_GAS))
 
     dCa = F * (Ca_in - Ca_s) - k1 * Ca_s - k3 * Ca_s**2
     dCb = -F * Cb_s + k1 * Ca_s - k2 * Cb_s

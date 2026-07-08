@@ -22,6 +22,7 @@ Typical usage
  
 from typing import Sequence
 import casadi as ca
+from casadi import sin, cos, sqrt, log
 from ..common import Const
  
 # ---------------------------------------------------------------------------
@@ -140,16 +141,16 @@ def double_cart_pendulum(*,
         dx    - x_dot,
         omega1 - th1_dot,
         omega2 - th2_dot,
-        p1 * ddx + p2 * alpha1 * ca.cos(theta1) + p3 * alpha2 * ca.cos(theta2)
-            - (p2 * omega1**2 * ca.sin(theta1)
-               + p3 * omega2**2 * ca.sin(theta2) + u),
-        -p2 * ca.cos(theta1) * ddx - p4 * alpha1
-            - p5 * alpha2 * ca.cos(theta1 - theta2)
-            - (p7 * ca.sin(theta1) + p5 * omega2**2 * ca.sin(theta1 - theta2)),
-        -p3 * ca.cos(theta2) * ddx
-            - p5 * alpha1 * ca.cos(theta1 - theta2) - p6 * alpha2
-            - (-p5 * omega1**2 * ca.sin(theta1 - theta2)
-               + p8 * ca.sin(theta2)),
+        p1 * ddx + p2 * alpha1 * cos(theta1) + p3 * alpha2 * cos(theta2)
+            - (p2 * omega1**2 * sin(theta1)
+               + p3 * omega2**2 * sin(theta2) + u),
+        -p2 * cos(theta1) * ddx - p4 * alpha1
+            - p5 * alpha2 * cos(theta1 - theta2)
+            - (p7 * sin(theta1) + p5 * omega2**2 * sin(theta1 - theta2)),
+        -p3 * cos(theta2) * ddx
+            - p5 * alpha1 * cos(theta1 - theta2) - p6 * alpha2
+            - (-p5 * omega1**2 * sin(theta1 - theta2)
+               + p8 * sin(theta2)),
     )
     return _DAEFunction('double_cart_pendulum', t, x, xdot, u, G)
  
@@ -218,9 +219,9 @@ def multilevel_cart_pendulum(*,
             return a0 if i == 0 else b[i - 1]
         ii, jj = min(i, j), max(i, j)
         if ii == 0:
-            return -a[jj - 1] * ca.cos(thetas[jj - 1])
+            return -a[jj - 1] * cos(thetas[jj - 1])
         else:
-            return a[jj - 1] * L[ii - 1] * ca.cos(thetas[jj - 1] - thetas[ii - 1])
+            return a[jj - 1] * L[ii - 1] * cos(thetas[jj - 1] - thetas[ii - 1])
  
     H1 = ca.SX(np_pend + 1, np_pend + 1)
     for i in range(np_pend + 1):
@@ -231,7 +232,7 @@ def multilevel_cart_pendulum(*,
     accel = ca.vertcat(ddx, *[-alphas[i] for i in range(np_pend)])
  
     # h3 (Const.GRAVIty vector)
-    h3 = ca.vertcat(0.0, *[a[i] * g * ca.sin(thetas[i]) for i in range(np_pend)])
+    h3 = ca.vertcat(0.0, *[a[i] * g * sin(thetas[i]) for i in range(np_pend)])
  
     # H2 (velocity-dependent and friction terms) — replicated from numpy version
     # Upper triangular velocity coupling
@@ -240,16 +241,16 @@ def multilevel_cart_pendulum(*,
         row = ca.SX(1, np_pend + 1)
         for j in range(i, np_pend):
             if i == 0:
-                row[0, j + 1] = -a[j] * ca.sin(thetas[j]) * omegas[j]
+                row[0, j + 1] = -a[j] * sin(thetas[j]) * omegas[j]
             else:
-                row[0, j + 1] = a[j] * L[i - 1] * omegas[j] * ca.sin(thetas[j] - thetas[i - 1])
+                row[0, j + 1] = a[j] * L[i - 1] * omegas[j] * sin(thetas[j] - thetas[i - 1])
         H2_sup_rows.append(row)
     H2_sup = ca.vertcat(*H2_sup_rows)
  
     H2_inf = ca.SX(np_pend + 1, np_pend + 1)
     for j in range(1, np_pend + 1):
         for i in range(j, np_pend):
-            H2_inf[i + 1, j] = -a[i] * L[j - 1] * ca.sin(thetas[i] - thetas[j - 1]) * omegas[j - 1]
+            H2_inf[i + 1, j] = -a[i] * L[j - 1] * sin(thetas[i] - thetas[j - 1]) * omegas[j - 1]
  
     # Friction diagonal (cart + pendulums)
     f_diag_vals = (
@@ -313,9 +314,9 @@ def quadrotor(*,
     tau_psi   = drag * (-u[0] + u[1] - u[2] + u[3])
     F         = k * (u[0] + u[1] + u[2] + u[3])
  
-    cp, sp = ca.cos(phi),   ca.sin(phi)
-    ct, st = ca.cos(theta), ca.sin(theta)
-    cy, sy = ca.cos(psi),   ca.sin(psi)
+    cp, sp = cos(phi),   sin(phi)
+    ct, st = cos(theta), sin(theta)
+    cy, sy = cos(psi),   sin(psi)
  
     R = ca.vertcat(
         ca.horzcat(cy*ct, cy*st*sp - sy*cp, cy*st*cp + sy*sp),
@@ -409,7 +410,7 @@ def oil_well(*,
     P_ab     = P_at + x0 * g * L_a / V_a
     rho_G_ab = P_ab * M_G / (R * T_a)
     rho_G_in = P_gs_ * M_G / (R * T_a)
-    w_G_in   = K_gs * u[1] * ca.sqrt(rho_G_in * ca.fmax(P_gs_ - P_at, Const.ZERO))
+    w_G_in   = K_gs * u[1] * sqrt(rho_G_in * ca.fmax(P_gs_ - P_at, Const.ZERO))
  
     # ---- Tubing ----
     rho_G_tt  = x1 / (V_t + S_bh * L_bh - x2 / rho_L)
@@ -424,7 +425,7 @@ def oil_well(*,
  
     # Friction factor (Serghides / Colebrook): avoid log10 issues with fmax
     Re_safe = ca.fmax(Re_t, 1.0)
-    lambda_t = 1 / (-1.82 * (ca.log(
+    lambda_t = 1 / (-1.82 * (log(
         (epsilon / D_t / 3.7)**1.11 + 6.9 / Re_safe
     ) / math.log(10)))**2
  
@@ -434,18 +435,18 @@ def oil_well(*,
     P_tb = P_tt + avg_rho_t * g * L_t + F_t
  
     # ---- Bottom hole ----
-    D_bh        = ca.sqrt(4 * S_bh / math.pi)
+    D_bh        = sqrt(4 * S_bh / math.pi)
     avg_U_lb    = avg_w_res / (rho_L * S_bh)
     Re_bh       = rho_L * avg_U_lb * D_bh / mu
     Re_bh_safe  = ca.fmax(Re_bh, 1.0)
-    lambda_b    = 1 / (-1.82 * (ca.log(
+    lambda_b    = 1 / (-1.82 * (log(
         (epsilon / D_bh / 3.7)**1.11 + 6.9 / Re_bh_safe
     ) / math.log(10)))**2
     F_b  = lambda_b * rho_L * avg_U_lb**2 * L_bh / (2 * D_bh)
     P_bh = P_tb + F_b + rho_L * g * L_bh
  
     # ---- Inner flows ----
-    w_G_inj  = K_inj * ca.sqrt(rho_G_ab * ca.fmax(P_ab - P_tb, Const.ZERO))
+    w_G_inj  = K_inj * sqrt(rho_G_ab * ca.fmax(P_ab - P_tb, Const.ZERO))
     w_res    = PI * ca.fmax(P_res_ - P_bh, Const.ZERO)
     w_G_res  = alpha_G_tb_m * w_res
     w_L_res  = (1 - alpha_G_tb_m) * w_res
@@ -462,7 +463,7 @@ def oil_well(*,
     rho_m_tt   = alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt
     alpha_G_tt_m = ((1 - alpha_L_tt) * rho_G_tt
                     / (alpha_L_tt * rho_L + (1 - alpha_L_tt) * rho_G_tt))
-    w_out   = K_pr * u[0] * ca.sqrt(rho_m_tt * ca.fmax(P_tt - P_out_, Const.ZERO))
+    w_out   = K_pr * u[0] * sqrt(rho_m_tt * ca.fmax(P_tt - P_out_, Const.ZERO))
     w_G_out = alpha_G_tt_m * w_out
     w_L_out = (1 - alpha_G_tt_m) * w_out
  
