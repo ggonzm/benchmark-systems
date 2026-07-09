@@ -116,12 +116,11 @@ def cart_pendulum(t, x, *,
 def furuta_pendulum(t, x, *,
                     m1: float, L1: float, J1: float, b1: float,
                     m2: float, L2: float, J2: float, b2: float,
-                    l1: float|None = None, l2 : float|None = None,
+                    l1: float, l2 : float,
                     K: float, u: float = 0.0) -> np.ndarray:
     '''
     Furuta pendulum expressions obtained from Euler-Lagrange equations and Rayleigh dissipation equation.
-    The model is based on the one presented in https://zaguan.unizar.es/record/61249, although the pendulum angular position
-    is defined as theta = pi when the pendulum is pointing up, rather than theta = 0.
+    The model is based on the one presented in https://zaguan.unizar.es/record/61249 (Equations 36 and 37).
 
     Parameters
     ----------
@@ -134,21 +133,21 @@ def furuta_pendulum(t, x, *,
     L1 : float
         Length of the motor arm.
     J1 : float
-        Moment of inertia of the motor arm.
+        Moment of inertia of the motor arm w.r.t. its center of mass.
     b1 : float
-        Viscous friction coefficient of the motor arm.
+        Drag coefficient of the motor arm.
     m2 : float
         Mass of the pendulum arm.
     L2 : float
         Length of the pendulum arm.
     J2 : float
-        Moment of inertia of the pendulum arm.
+        Moment of inertia of the pendulum arm w.r.t. its center of mass.
     b2 : float
-        Viscous friction coefficient of the pendulum arm.
-    l1 : float, optional
-        Distance from the pivot point to the center of mass of the motor arm. If None, it is assumed to be at the middle of the arm.
-    l2 : float, optional
-        Distance from the pivot point to the center of mass of the pendulum arm. If None, it is assumed to be at the end of the arm.
+        Drag coefficient of the pendulum arm.
+    l1 : float
+        Distance from the pivot point to the center of mass of the motor arm.
+    l2 : float
+        Distance from the pivot point to the center of mass of the pendulum arm.
     K : float
         DC motor torque constant. The torque applied to the motor arm is modeled as K*u, where u is the control input.
     
@@ -158,19 +157,9 @@ def furuta_pendulum(t, x, *,
         Voltage applied to the DC motor. Default is 0.0.
     '''
     
-    # center of mass of the arms ... If l1 and l2 are not provided, they are assumed to be at the middle and at the end of the arms, respectively.
-    if l1 is None:
-        l1 = L1/2
-    else:
-        assert l1 <= L1, "l1 must be less than or equal to L1"
-    if l2 is None:
-        l2 = L2
-    else:
-        assert l2 <= L2, "l2 must be less than or equal to L2"
-    
     theta1, theta2, omega1, omega2 = x
     
-    # Total moments of inertia
+    # Total moments of inertia w.r.t. the pivot point of each arm
     J1_hat = J1 + m1*l1**2 # Arm 1
     J2_hat = J2 + m2*l2**2 # Arm 2
     J0_hat = J1_hat + m2*L1**2 # motor rotor when pendulum is pointing down
@@ -182,16 +171,16 @@ def furuta_pendulum(t, x, *,
     w0 = (m2*Const.GRAVITY*l2/J2_hat)**0.5
     cp1 = b1/J2_hat
     cp2 = b2/J2_hat
-    Delta = beta + sin(theta2)**2 + alpha**2*cos(theta2)**2
+    Delta = beta + sin(theta2)**2 - alpha**2*cos(theta2)**2
 
     # State space
     dx = np.zeros(4)
     dx[0] = omega1
     dx[1] = omega2
-    dx[2] = (1/Delta) * (gamma*w0**2*u + 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
-                         - omega1**2*alpha*sin(theta2)*cos(theta2)**2 - omega2*cp2*alpha*cos(theta2) - alpha*w0**2*sin(theta2)*cos(theta2))
-    dx[3] = (1/Delta) * (alpha*w0**2*u*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 - omega1*cp1*alpha*cos(theta2)
-                         + omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta - sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
+    dx[2] = (1/Delta) * (gamma*w0**2*u - 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
+                         - omega1**2*alpha*sin(theta2)*cos(theta2)**2 + omega2*cp2*alpha*cos(theta2) + alpha*w0**2*sin(theta2)*cos(theta2))
+    dx[3] = (1/Delta) * (-alpha*gamma*w0**2*u*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 + omega1*cp1*alpha*cos(theta2)
+                         - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
                          - (beta + sin(theta2)**2)*omega2*cp2 - beta*w0**2*sin(theta2) - w0**2*sin(theta2)**3)
     return dx
     

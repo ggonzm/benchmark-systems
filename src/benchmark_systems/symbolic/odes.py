@@ -129,7 +129,7 @@ def cart_pendulum(*, m: float, M: float, L: float, drag: float = 0.0) -> ca.Func
 def furuta_pendulum(*,
                     m1: float, L1: float, J1: float, b1: float,
                     m2: float, L2: float, J2: float, b2: float,
-                    l1: float|None = None, l2 : float|None = None,
+                    l1: float, l2 : float,
                     K: float) -> ca.Function:
     """
     Furuta pendulum (rotary inverted pendulum).
@@ -137,16 +137,6 @@ def furuta_pendulum(*,
     States : [theta1, theta2, omega1, omega2]   (theta2=pi → pointing up)
     Inputs : u – DC Voltage (V)
     """
-
-    # center of mass of the arms ... If l1 and l2 are not provided, they are assumed to be at the middle and at the end of the arms, respectively.
-    if l1 is None:
-        l1 = L1 / 2
-    else:
-        assert l1 <= L1, "l1 must be less than or equal to L1"
-    if l2 is None:
-        l2 = L2
-    else:
-        assert l2 <= L2, "l2 must be less than or equal to L2"
     
     t  = _sym('t')
     x  = _sym('x', 4)
@@ -166,17 +156,17 @@ def furuta_pendulum(*,
     w0 = (m2*Const.GRAVITY*l2/J2_hat)**0.5
     cp1 = b1/J2_hat
     cp2 = b2/J2_hat
-    Delta = beta + sin(theta2)**2 + alpha**2*cos(theta2)**2
+    Delta = beta + sin(theta2)**2 - alpha**2*cos(theta2)**2
 
     dx = ca.vertcat(
         omega1,
         omega2,
-        (1/Delta) * (gamma*w0**2*u_sym + 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
-                    - omega1**2*alpha*sin(theta2)*cos(theta2)**2 - omega2*cp2*alpha*cos(theta2) - alpha*w0**2*sin(theta2)*cos(theta2)),
-        (1/Delta) * (alpha*w0**2*u_sym*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 - omega1*cp1*alpha*cos(theta2)
-                    + omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta - sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
+        (1/Delta) * (gamma*w0**2*u_sym - 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
+                    - omega1**2*alpha*sin(theta2)*cos(theta2)**2 + omega2*cp2*alpha*cos(theta2) + alpha*w0**2*sin(theta2)*cos(theta2)),
+        (1/Delta) * (-alpha*gamma*w0**2*u_sym*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 + omega1*cp1*alpha*cos(theta2)
+                    - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
                     - (beta + sin(theta2)**2)*omega2*cp2 - beta*w0**2*sin(theta2) - w0**2*sin(theta2)**3)
-    )
+)
     return ca.Function('furuta_pendulum', [t, x, u_sym], [dx],
                        ['t', 'x', 'u'], ['dx'])
 
