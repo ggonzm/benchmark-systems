@@ -175,9 +175,9 @@ refs = np.array([[0, 0, 8], [3, 2, 5], [1, 1, 8]]) # References to follow in the
 quadrotor_states = np.array([[] for _ in range(12)])
 for ref in refs:
     states = solve_ivp_casadi(cl_quadrotor_fn, t_span=(0, t_ref), y0=y0 if quadrotor_states.size == 0 else quadrotor_states[:, -1],
-                              N=int(t_ref/dt), u=ref)
+                              t_eval=np.linspace(dt, t_ref, int(t_ref/dt)), u=ref)
     quadrotor_states = np.hstack([quadrotor_states, states.y])
-t = np.linspace(0, 3*t_ref, quadrotor_states.shape[1])
+t = np.arange(dt, 3*t_ref + dt, dt)
 
 # ------------------------------------- Plotting ---------------------------------
 # Plot references
@@ -191,7 +191,7 @@ plt.xlabel('Time (s)')
 ```
 ![cl_quadrotor_states](cl_quadrotor_sim.png)
 
-The function `solve_ivp_casadi` is implemented in a way that switching between the symbolic and numerical versions of the models is almost straightforward. For DAEs, the function `solve_dae_casadi` is also implemented.
+The function `solve_ivp_casadi` is implemented in a way that switching between the symbolic and numerical versions of the models is almost straightforward. Its `t_eval` argument follows SciPy's output-grid convention and may omit the initial time, which avoids duplicate samples when concatenating piecewise simulations. For DAEs, the function `solve_dae_casadi` provides the same behavior.
 
 Note that the closed-loop model does not need to be a symbolic one, given that we only want to simulate it. The following numerical function can be used to simulate the closed-loop system with `scipy`'s `solve_ivp`:
 ```python
