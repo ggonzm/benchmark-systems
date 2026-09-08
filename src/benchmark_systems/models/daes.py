@@ -103,6 +103,16 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     u : float, optional
         Force applied to the cart. Default is 0.0.
     '''
+    x = np.asarray(x, dtype=float)
+    x_dot = np.asarray(x_dot, dtype=float)
+    if x.ndim != 1 or x_dot.ndim != 1 or x.size != x_dot.size:
+        raise ValueError("x and x_dot must be one-dimensional arrays of equal length")
+    if len(L) != len(m):
+        raise ValueError("m and L must have the same length")
+    expected_size = 2 * (len(m) + 1)
+    if x.size != expected_size:
+        raise ValueError(f"x and x_dot must contain {expected_size} values")
+
     half = len(x) // 2 # First half are positions and angles, second half are velocities and angular velocities
     x, thetas, dx, omegas = x[0], x[1:half], x[half], x[half+1:]
     x_dot, theta_dots, ddx, alphas = x_dot[0], x_dot[1:half], x_dot[half], x_dot[half+1:]
@@ -111,7 +121,12 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     npendulums = len(m) # Number of pendulums
     l = [L[i]/2 for i in range(npendulums)] # Half of the length of the pendulums
     J = [(m[i] * l[i]**2) / 3 for i in range(npendulums)] # Inertia of the pendulums
-    f = np.abs(np.array(deltas) @ np.array([[dx], omegas])) if deltas is not None else [0.0]*(1+npendulums) # Friction forces ... Proportional to the velocities
+    if deltas is not None:
+        if len(deltas) != npendulums + 1:
+            raise ValueError("deltas must contain one coefficient for the cart and each pendulum")
+        f = np.abs(np.asarray(deltas) * np.concatenate([[dx], omegas]))
+    else:
+        f = np.zeros(npendulums + 1)
 
     # Model coefficients
     a0 = M + sum(m)

@@ -19,8 +19,6 @@ Typical usage
 >>> # Numerical evaluation
 >>> x0 = [3.04, 0.0]
 >>> f_val = f(0, x0, 0)          # returns DM column vector
->>> # Build an integrator (RK4, 1000 steps over 20 s)
->>> integrator = pendulum_integrator(m=1.0, L=2.0, drag=0.0, T=20.0, N=1000)
 """
 
 from typing import Sequence
@@ -247,7 +245,7 @@ def johansson(*,
     gamma   = u[2:]
     pumps   = u[:2]
 
-    h_clip = [ca.fmax(h[i], 0.0) for i in range(4)]
+    h_clip = [ca.fmin(ca.fmax(h[i], Const.ZERO), h_max[i]) for i in range(4)]
 
     dh = ca.vertcat(
         -(a[0] / A[0]) * sqrt(2 * g * h_clip[0]) + (a[2] / A[0]) * sqrt(2 * g * h_clip[2]) + (1 - gamma[0]) * K[0] * pumps[0] / A[0],
@@ -405,7 +403,7 @@ def quadrotor(*,
 
     dxyz  = R @ body_vel
     deuler = ca.solve(W, ca.vertcat(p, q_r, r))
-    dsbody = (ca.vertcat(q_r * v_b - r * w_b,
+    dsbody = (ca.vertcat(r * v_b - q_r * w_b,
                          p * w_b - r * s,
                          q_r * s - p * v_b)
               + (1 / m) * ca.vertcat(fx, fy, fz))
