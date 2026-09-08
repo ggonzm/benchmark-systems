@@ -7,7 +7,7 @@ CasADi 3.6.x and the semi-explicit DAE reformulation
 CasADi 3.6.x IDAS does not support the ``'xdot'`` key in the DAE dict.
 Fully-implicit DAEs  G(t, x, ẋ, u) = 0  are handled by splitting the
 state vector into differential and algebraic parts according to the
-``n_diff`` attribute of the _DAEFunction:
+``n_diff`` attribute of the DAEFunction:
  
     x_diff  – first n_diff components  (have a true time derivative)
     z_alg   – remaining components are purely algebraic (no derivative)
@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from typing import Sequence
 import numpy as np
 import casadi as ca
+
+from .daes import DAEFunction
  
  
 # ---------------------------------------------------------------------------
@@ -42,9 +44,9 @@ class IntegrationResult:
  
     Attributes
     ----------
-    t   : np.ndarray  shape (N+1,)
-    y   : np.ndarray  shape (n_states, N+1)  – full state [x_diff ; x_alg]
-    yp  : np.ndarray  shape (n_states, N+1)  – ẋ trajectory; zeros for ODEs
+    t   : np.ndarray  shape (n_times,)
+    y   : np.ndarray  shape (n_states, n_times)  – full state [x_diff ; x_alg]
+    yp  : np.ndarray  shape (n_states, n_times)  – ẋ trajectory; zeros for ODEs
     success : bool
     message : str
     """
@@ -63,6 +65,41 @@ def _to_dm(val) -> ca.DM:
     if isinstance(val, (int, float)):
         return ca.DM([val])
     return ca.DM(val)
+
+
+def _validate_t_span(t_span: tuple[float, float]) -> tuple[float, float]:
+    if len(t_span) != 2:
+        raise ValueError("t_span must contain exactly two values")
+    t0, tf = map(float, t_span)
+    if not np.isfinite([t0, tf]).all():
+        raise ValueError("t_span values must be finite")
+    if tf <= t0:
+        raise ValueError("t_span must satisfy tf > t0")
+    return t0, tf
+
+
+def _evaluation_grid(
+    t_span: tuple[float, float], t_eval: Sequence[float]
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Return the integration grid, requested output grid, and output offset."""
+    t0, tf = _validate_t_span(t_span)
+    output_times = np.asarray(t_eval, dtype=float)
+    if output_times.ndim != 1 or output_times.size == 0:
+        raise ValueError("t_eval must be a non-empty one-dimensional sequence")
+    if not np.isfinite(output_times).all():
+        raise ValueError("t_eval values must be finite")
+    if np.any(np.diff(output_times) <= 0):
+        raise ValueError("t_eval values must be strictly increasing")
+    if output_times[0] < t0 or output_times[-1] > tf:
+        raise ValueError("t_eval values must lie within t_span")
+
+    if output_times[0] == t0:
+        return output_times, output_times, 0
+
+    # CasADi still needs to advance from y(t0), although SciPy-style t_eval may
+    # request that the initial state be omitted from the returned solution.
+    integration_times = np.concatenate(([t0], output_times))
+    return integration_times, output_times, 1
  
  
 # ---------------------------------------------------------------------------
@@ -73,8 +110,8 @@ def solve_ivp_casadi(f: ca.Function,
                      t_span: tuple[float, float],
                      y0: Sequence[float],
                      *,
+                     t_eval: Sequence[float],
                      u: float | Sequence[float] = 0.0,
-                     N: int = 1000,
                      integrator: str = 'rk',
                      opts: dict | None = None) -> IntegrationResult:
     """
@@ -87,22 +124,39 @@ def solve_ivp_casadi(f: ca.Function,
     t_span : (t0, tf)
     y0 : array-like
     u : scalar or array-like.  Constant control input.  Default 0.
-    N : int.  Number of integration steps.  Default 1000.
+    t_eval : array-like.
+        Times at which to return the solution. Values must be strictly
+        increasing and lie within ``t_span``. Unlike the internal integration
+        grid, this sequence does not need to include ``t_span[0]``.
     integrator : str.  ``'rk'`` (RK4), ``'cvodes'``, or ``'collocation'``.
     opts : dict, optional.  Extra options for ``ca.integrator``.
     """
-    t0, tf = t_span
-    nx     = len(y0)
+    integration_times, output_times, output_start = _evaluation_grid(
+        t_span, t_eval
+    )
+    y0_arr = np.asarray(y0, dtype=float).reshape(-1)
+    if not np.isfinite(y0_arr).all():
+        raise ValueError("y0 values must be finite")
+    nx     = y0_arr.size
+    expected_nx = f.size1_in('x')
+    if nx != expected_nx:
+        raise ValueError(f"y0 must contain {expected_nx} states, got {nx}")
     u_dm   = _to_dm(u)
     nu     = u_dm.numel()
-    dt     = (tf - t0) / N
+    expected_nu = f.size1_in('u')
+    if nu != expected_nu:
+        raise ValueError(f"u must contain {expected_nu} inputs, got {nu}")
  
     t_sym = ca.SX.sym('t')
     x_sym = ca.SX.sym('x', nx)
-    u_sym = ca.SX.sym('u', nu)
-    dx    = f(t_sym, x_sym, u_sym)
- 
-    ode_dict = {'x': x_sym, 'p': u_sym, 'ode': dx}
+    # Every cached integrator runs on local time [0, dt]. The extra parameter
+    # shifts local time back to the absolute interval expected by f(t, x, u).
+    p_sym = ca.SX.sym('p', nu + 1)
+    u_sym = p_sym[:nu]
+    time_offset = p_sym[nu]
+    dx    = f(t_sym + time_offset, x_sym, u_sym)
+
+    ode_dict = {'t': t_sym, 'x': x_sym, 'p': p_sym, 'ode': dx}
  
     default_opts: dict = {}
     if integrator == 'rk':
@@ -110,38 +164,60 @@ def solve_ivp_casadi(f: ca.Function,
     if opts:
         default_opts.update(opts)
  
-    integ  = ca.integrator('F', integrator, ode_dict, t0, [t0 + dt], default_opts)
-    times  = np.linspace(t0, tf, N + 1)
-    states = np.zeros((nx, N + 1))
-    states[:, 0] = np.asarray(y0).flatten()
-    x_k = ca.DM(np.asarray(y0, dtype=float).reshape(-1, 1))
- 
-    for k in range(N):
-        res = integ(x0=x_k, p=u_dm)
+    states = np.zeros((nx, integration_times.size))
+    states[:, 0] = y0_arr
+    x_k = ca.DM(y0_arr.reshape(-1, 1))
+    integrators: dict[float, ca.Function] = {}
+
+    for k, (time_start, time_end) in enumerate(
+        zip(integration_times[:-1], integration_times[1:])
+    ):
+        dt = float(time_end - time_start)
+        # Building a CasADi integrator is expensive. Reuse one for equal step
+        # sizes, tolerating the round-off produced by np.linspace/np.diff.
+        integ = next(
+            (
+                candidate
+                for step, candidate in integrators.items()
+                if np.isclose(dt, step, rtol=1e-12, atol=0.0)
+            ),
+            None,
+        )
+        if integ is None:
+            integ = ca.integrator(
+                f'F_{len(integrators)}', integrator, ode_dict, 0.0, [dt], default_opts
+            )
+            integrators[dt] = integ
+        parameters = ca.vertcat(u_dm, float(time_start))
+        res = integ(x0=x_k, p=parameters)
         x_k = res['xf']
         states[:, k + 1] = np.asarray(x_k).flatten()
- 
-    return IntegrationResult(t=times[:-1], y=states[:, :-1])
+
+    # output_start is one only when t0 was inserted as an internal-only node.
+    output_states = states[:, output_start:]
+    return IntegrationResult(
+        t=output_times, y=output_states, yp=np.zeros_like(output_states)
+    )
  
  
 # ---------------------------------------------------------------------------
 # DAE integrator
 # ---------------------------------------------------------------------------
  
-def solve_dae_casadi(F,
+def solve_dae_casadi(F: DAEFunction,
                      t_span: tuple[float, float],
                      y0: Sequence[float],
                      yp0: Sequence[float],
                      *,
+                     t_eval: Sequence[float],
                      u: float | Sequence[float] = 0.0,
-                     N: int = 1000,
                      opts: dict | None = None) -> IntegrationResult:
     """
     Integrate a fully-implicit DAE  G(t, x, ẋ, u) = 0  using CasADi / IDAS.
  
     Parameters
     ----------
-    F : _DAEFunction
+    F : DAEFunction
         Object returned by the symbolic DAE constructors.  Its ``n_diff``
         attribute controls the differential/algebraic splitting.
     t_span : (t0, tf)
@@ -150,7 +226,10 @@ def solve_dae_casadi(F,
         Initial derivatives for the differential part; algebraic initial
         guess for the algebraic part.
     u : scalar or array-like.  Constant control input.  Default 0.
-    N : int.  Number of output steps.  Default 1000.
+    t_eval : array-like.
+        Times at which to return the solution. Values must be strictly
+        increasing and lie within ``t_span``. This sequence may omit
+        ``t_span[0]`` to simplify concatenating piecewise simulations.
     opts : dict, optional.  Extra IDAS options.
  
     Returns
@@ -173,19 +252,38 @@ def solve_dae_casadi(F,
     yp0[:nd] is the initial guess for xdot_diff.
     IDAS will refine both z_diff and z_alg to satisfy consistency at t0.
     """
-    t0, tf  = t_span
-    nx      = len(y0)
+    integration_times, output_times, output_start = _evaluation_grid(
+        t_span, t_eval
+    )
+    y0_arr = np.asarray(y0, dtype=float).reshape(-1)
+    ydot0_arr = np.asarray(yp0, dtype=float).reshape(-1)
+    if y0_arr.size != ydot0_arr.size:
+        raise ValueError("y0 and yp0 must have the same length")
+    if not np.isfinite(y0_arr).all() or not np.isfinite(ydot0_arr).all():
+        raise ValueError("y0 and yp0 values must be finite")
+    nx      = y0_arr.size
+    expected_nx = F.fn.size1_in('x')
+    if nx != expected_nx:
+        raise ValueError(f"y0 must contain {expected_nx} states, got {nx}")
     nd      = F.n_diff           # number of differential states
+    if not 0 < nd <= nx:
+        raise ValueError("F.n_diff must be between 1 and the number of states")
     na      = nx - nd            # number of algebraic states
     u_dm    = _to_dm(u)
     nu      = u_dm.numel()
-    dt_step = (tf - t0) / N
+    expected_nu = F.fn.size1_in('u')
+    if nu != expected_nu:
+        raise ValueError(f"u must contain {expected_nu} inputs, got {nu}")
  
     t_sym  = ca.SX.sym('t')
     xd_sym = ca.SX.sym('xd', nd)                 # differential states
     # z = [xdot_diff (nd) ; x_alg (na)]
     z_sym  = ca.SX.sym('z',  nd + na)
-    u_sym  = ca.SX.sym('u',  nu)
+    # As in the ODE solver, append the absolute interval start to the constant
+    # controls so one local-time integrator can be reused over the whole grid.
+    p_sym  = ca.SX.sym('p', nu + 1)
+    u_sym  = p_sym[:nu]
+    time_offset = p_sym[nu]
  
     xdot_diff = z_sym[:nd]
     x_alg     = z_sym[nd:]
@@ -194,12 +292,13 @@ def solve_dae_casadi(F,
     x_full    = ca.vertcat(xd_sym, x_alg)          # [x_diff ; x_alg]
     xdot_full = ca.vertcat(xdot_diff, ca.SX.zeros(na))  # alg derivatives = 0
     
-    G_sym = F.fn(t_sym, x_full, xdot_full, u_sym)
+    G_sym = F.fn(t_sym + time_offset, x_full, xdot_full, u_sym)
  
     dae_dict = {
+        't':   t_sym,
         'x':   xd_sym,
         'z':   z_sym,
-        'p':   u_sym,
+        'p':   p_sym,
         'ode': xdot_diff,   # d(x_diff)/dt = z[:nd]
         'alg': G_sym,       # G(t, x_full, xdot_full, u) = 0
     }
@@ -208,15 +307,8 @@ def solve_dae_casadi(F,
     if opts:
         default_opts.update(opts)
  
-    integ = ca.integrator('G_integ', 'idas', dae_dict,
-                          t0, [t0 + dt_step], default_opts)
- 
-    times  = np.linspace(t0, tf, N + 1)
-    states = np.zeros((nx, N + 1))
-    derivs = np.zeros((nx, N + 1))
- 
-    y0_arr    = np.asarray(y0,     dtype=float).flatten()
-    ydot0_arr = np.asarray(yp0, dtype=float).flatten()
+    states = np.zeros((nx, integration_times.size))
+    derivs = np.zeros((nx, integration_times.size))
  
     states[:, 0] = y0_arr
     derivs[:, 0] = ydot0_arr
@@ -224,9 +316,30 @@ def solve_dae_casadi(F,
     xd_k = ca.DM(y0_arr[:nd].reshape(-1, 1))
     # z0 = [xdot_diff_guess ; x_alg_guess]
     z_k  = ca.DM(np.concatenate([ydot0_arr[:nd], y0_arr[nd:]]).reshape(-1, 1))
- 
-    for k in range(N):
-        res  = integ(x0=xd_k, z0=z_k, p=u_dm)
+    integrators: dict[float, ca.Function] = {}
+
+    for k, (time_start, time_end) in enumerate(
+        zip(integration_times[:-1], integration_times[1:])
+    ):
+        dt = float(time_end - time_start)
+        # Non-uniform t_eval grids may require several compiled integrators,
+        # while uniform grids normally reuse this first cached instance.
+        integ = next(
+            (
+                candidate
+                for step, candidate in integrators.items()
+                if np.isclose(dt, step, rtol=1e-12, atol=0.0)
+            ),
+            None,
+        )
+        if integ is None:
+            integ = ca.integrator(
+                f'G_integ_{len(integrators)}', 'idas', dae_dict,
+                0.0, [dt], default_opts
+            )
+            integrators[dt] = integ
+        parameters = ca.vertcat(u_dm, float(time_start))
+        res  = integ(x0=xd_k, z0=z_k, p=parameters)
         xd_k = res['xf']
         z_k  = res['zf']
  
@@ -236,5 +349,10 @@ def solve_dae_casadi(F,
         states[:nd,  k + 1] = xd_np
         states[nd:,  k + 1] = z_np[nd:]     # algebraic states from z
         derivs[:nd,  k + 1] = z_np[:nd]     # xdot_diff from z
- 
-    return IntegrationResult(t=times[:-1], y=states[:, :-1], yp=derivs[:, :-1])
+
+    # Drop the internally inserted t0 column when it was not requested.
+    return IntegrationResult(
+        t=output_times,
+        y=states[:, output_start:],
+        yp=derivs[:, output_start:],
+    )
