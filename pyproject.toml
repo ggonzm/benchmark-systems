@@ -5,7 +5,7 @@ description = "Open collection of model predictive control (MPC) benchmarking pr
 authors = [
     {name = "Guzmán", email = "ggonzm@unileon.es"},
 ]
-dependencies = ["scipy>=1.14.1", "solve-dae>=0.2.3"]
+dependencies = ["scipy>=1.14.1", "solve-dae>=0.2.3", "numpy>=2.1.0"]
 requires-python = ">=3.13"
 readme = "README.md"
 license = {text = "MIT"}
@@ -18,7 +18,8 @@ sym = [
     "casadi>=3.7.2",
 ]
 all = [
-    "benchmark-systems[sym, anim]",
+    "casadi>=3.7.2",
+    "matplotlib>=3.10.9",
 ]
 
 
@@ -30,6 +31,10 @@ build-backend = "pdm.backend"
 [tool.pdm]
 distribution = true
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+
 
 
 
@@ -37,4 +42,5 @@ distribution = true
 dev = [
     "matplotlib>=3.10.9",
     "control>=0.10.2",
+    "pytest>=9.1.1",
 ]
