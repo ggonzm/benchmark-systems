@@ -33,7 +33,7 @@ def _sym(name: str, n: int = 1) -> ca.SX:
     return ca.SX.sym(name, n)
  
  
-class _DAEFunction:
+class DAEFunction:
     """
     Wrapper around a CasADi residual Function  G(t, x, xdot, u) = 0.
  
@@ -63,6 +63,16 @@ class _DAEFunction:
  
     def __call__(self, t_val, x_val, xdot_val, u_val):
         return self.fn(t_val, x_val, xdot_val, u_val)
+
+    @property
+    def state_size(self) -> int:
+        """Number of state and residual equations."""
+        return self._nx
+
+    @property
+    def input_size(self) -> int:
+        """Number of control inputs."""
+        return self._u.shape[0]
  
     def dae_dict(self) -> dict:
         """
@@ -92,6 +102,7 @@ class _DAEFunction:
         xdot_full = ca.vertcat(xdot_diff, ca.SX.zeros(na))
         G_s = self.fn(t_s, x_full, xdot_full, u_s)
         return {
+            't':   t_s,
             'x':   xd_s,
             'z':   z_s,
             'p':   u_s,
@@ -106,7 +117,7 @@ class _DAEFunction:
  
 def double_cart_pendulum(*,
                          M: float, m1: float, m2: float,
-                         L1: float, L2: float) -> _DAEFunction:
+                         L1: float, L2: float) -> DAEFunction:
     """
     Double inverted pendulum on a cart (Euler-Lagrange, DAE).
  
@@ -152,7 +163,7 @@ def double_cart_pendulum(*,
             - (-p5 * omega1**2 * sin(theta1 - theta2)
                + p8 * sin(theta2)),
     )
-    return _DAEFunction('double_cart_pendulum', t, x, xdot, u, G)
+    return DAEFunction('double_cart_pendulum', t, x, xdot, u, G)
  
  
 # ---------------------------------------------------------------------------
@@ -163,7 +174,7 @@ def multilevel_cart_pendulum(*,
                               M: float,
                               m: Sequence[float],
                               L: Sequence[float],
-                              deltas: Sequence[float] | None = None) -> _DAEFunction:
+                               deltas: Sequence[float] | None = None) -> DAEFunction:
     """
     N-level inverted pendulum on a cart (Euler-Lagrange, DAE).
  
@@ -171,6 +182,10 @@ def multilevel_cart_pendulum(*,
     Inputs  : u – force on cart (N)
     """
     np_pend = len(m)
+    if len(L) != np_pend:
+        raise ValueError("m and L must have the same length")
+    if deltas is not None and len(deltas) != np_pend + 1:
+        raise ValueError("deltas must contain one coefficient for the cart and each pendulum")
     half    = 1 + np_pend          # positions only
     nx      = 2 * half             # full state
  
@@ -278,7 +293,7 @@ def multilevel_cart_pendulum(*,
     el_residual = H2 @ vel_vec + h3 + h0 * u - H1 @ accel
  
     G = ca.vertcat(ode_residual, el_residual)
-    return _DAEFunction('multilevel_cart_pendulum', t, xv, xdot, u, G)
+    return DAEFunction('multilevel_cart_pendulum', t, xv, xdot, u, G)
  
  
 # ---------------------------------------------------------------------------
@@ -287,7 +302,7 @@ def multilevel_cart_pendulum(*,
  
 def quadrotor(*,
               Ixx: float, Iyy: float, Izz: float,
-              k: float, L: float, m: float, drag: float) -> _DAEFunction:
+               k: float, L: float, m: float, drag: float) -> DAEFunction:
     """
     Quadrotor – Euler-Lagrange formulation (DAE).
  
@@ -369,7 +384,7 @@ def quadrotor(*,
              - ca.vertcat(ddphi, ddth, ddpsi))
  
     G = ca.vertcat(g_ode, g_lin, g_ang)
-    return _DAEFunction('quadrotor', t, xv, xdot, u, G)
+    return DAEFunction('quadrotor', t, xv, xdot, u, G)
  
  
 # ---------------------------------------------------------------------------
@@ -382,7 +397,7 @@ def oil_well(*,
              T_t, D_t, L_t, V_t, epsilon, K_pr, P_out,
              S_bh, L_bh,
              P_res, avg_w_res, PI, GOR,
-             mu, rho_L) -> _DAEFunction:
+             mu, rho_L) -> DAEFunction:
     """
     Oil-well model (Jahanshahi, 2012).
  
@@ -482,7 +497,7 @@ def oil_well(*,
         xv[9]  - rho_m_tt,
         xv[10] - alpha_L_tt,
     )
-    return _DAEFunction('oil_well', t, xv, xdot, u, G, n_diff=3)
+    return DAEFunction('oil_well', t, xv, xdot, u, G, n_diff=3)
  
  
 # ---------------------------------------------------------------------------
@@ -494,7 +509,7 @@ def neutralization(*,
                    Wa1: float, Wa2: float, Wa3: float,
                    Wb1: float, Wb2: float, Wb3: float,
                    pK1: float, pK2: float,
-                   q1: float, d: float) -> _DAEFunction:
+                   q1: float, d: float) -> DAEFunction:
     """
     pH neutralization CSTR (DAE).
  
@@ -527,4 +542,4 @@ def neutralization(*,
               - 10**(-pH))
  
     G = ca.vertcat(G_diff, G_alg)
-    return _DAEFunction('neutralization', t, xv, xdot, u, G, n_diff=3)
+    return DAEFunction('neutralization', t, xv, xdot, u, G, n_diff=3)

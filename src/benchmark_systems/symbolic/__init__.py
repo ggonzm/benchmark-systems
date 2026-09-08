@@ -12,7 +12,7 @@ odes
     batch_bioreactor, cstr, quadrotor.
 
 daes
-    All DAE models as _DAEFunction wrappers: double_cart_pendulum,
+    All DAE models as DAEFunction wrappers: double_cart_pendulum,
     multilevel_cart_pendulum, quadrotor, oil_well, neutralization.
 
 integrate
@@ -32,6 +32,7 @@ from .odes import (
     quadrotor as quadrotor_ode,
 )
 from .daes import (
+    DAEFunction,
     double_cart_pendulum,
     multilevel_cart_pendulum,
     quadrotor as quadrotor_dae,
@@ -41,6 +42,7 @@ from .daes import (
 from .integrate import solve_ivp_casadi, solve_dae_casadi
 
 __all__ = [
+    "DAEFunction",
     "pendulum",
     "dc_motor",
     "cart_pendulum",
