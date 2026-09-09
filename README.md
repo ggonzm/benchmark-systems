@@ -241,19 +241,17 @@ axis_yz.set_xlabel('Y Axis', fontweight='bold'); axis_yz.set_ylabel('Z Axis', fo
 
 # If crashes (z<0), stop the animation. If not, animate until the end of the simulation.
 crash_point = np.where(quadrotor_states[2, :] < 0)[0][0] if np.any(quadrotor_states[2, :] < 0) else None
-if crash_point:
-    x_lims = (min(quadrotor_states[0, :crash_point+10]) - 1, max(quadrotor_states[0, :crash_point+10]) + 1)
-    y_lims = (min(quadrotor_states[1, :crash_point+10]) - 1, max(quadrotor_states[1, :crash_point+10]) + 1)
-    t_anim = quadrotor_states[crash_point+10]
+stop_index = min(crash_point + 10, quadrotor_states.shape[1]) if crash_point is not None else quadrotor_states.shape[1]
+if crash_point is not None:
+    x_lims = (min(quadrotor_states[0, :stop_index]) - 1, max(quadrotor_states[0, :stop_index]) + 1)
+    y_lims = (min(quadrotor_states[1, :stop_index]) - 1, max(quadrotor_states[1, :stop_index]) + 1)
     axis_xz.hlines(0, *x_lims, color='red', linestyle='--', linewidth=1)
     axis_yz.hlines(0, *y_lims, color='red', linestyle='--', linewidth=1)
-else:
-    t_anim = quadrotor_states.shape[1] * dt
 
 anim, _ = AutoAnimation(fig, Quadrotor(fig, axis_3d, axis_xy, axis_xz, axis_yz, L=quadrotor_params['L'],
-                                       xyz=quadrotor_states[0:3, :int(t_anim/dt)], angles=quadrotor_states[6:9, :int(t_anim/dt)],
-                                       xyz_ref=np.repeat(refs.T, int(t_ref/dt), axis=1)[:, :int(t_anim/dt)]),
-                    duration=t_anim, dt=dt, speed=10, repeat=True)
+                                       xyz=quadrotor_states[0:3, :stop_index], angles=quadrotor_states[3:6, :stop_index],
+                                       xyz_ref=np.repeat(refs.T, int(t_ref/dt), axis=1)[:, :stop_index]),
+                    times=np.arange(1, stop_index + 1) * dt, speed=10, repeat=True)
 ```
 ![quadrotor_animation](drone-lqr.gif)
 
