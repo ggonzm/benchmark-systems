@@ -1,6 +1,6 @@
 from .models import *
 
-__version__ = '1.0.6'
+__version__ = '1.0.7'
 
 from .models import __all__ as _model_exports
 
