@@ -16,9 +16,9 @@ Additionally, the `symbolic` module requires `casadi >= 3.7.2`, while the `anima
 
 ## Documentation
 
-The [user guide](https://github.com/ggonzm/benchmark-systems/tree/main/docs) includes installation instructions, a model
-catalog, numerical and symbolic examples, trajectory animations and an API
-reference generated from the public functions.
+The [online documentation](https://benchmark-systems.readthedocs.io/en/latest/) includes
+installation instructions, a model catalogue, numerical and symbolic examples,
+trajectory animations and the API reference.
 
 To build the documentation from a source checkout:
 
