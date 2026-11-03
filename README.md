@@ -10,8 +10,34 @@ The package has the following default dependencies:
 
 - scipy >= 1.14.1
 - solve-dae >= 0.2.3
+- numpy >= 2.1.0
 
 Additionally, the `symbolic` module requires `casadi >= 3.7.2`, while the `animations` module requires `matplotlib >= 3.10.9`.
+
+## Documentation
+
+The [user guide](https://github.com/ggonzm/benchmark-systems/tree/main/docs) includes installation instructions, a model
+catalog, numerical and symbolic examples, trajectory animations and an API
+reference generated from the public functions.
+
+To build the documentation from a source checkout:
+
+```shell
+pdm sync -G dev -G docs -G sym
+pdm run sphinx-build -W --keep-going -b html docs docs/_build/html
+pdm run python docs/_scripts/check_html.py
+pdm run sphinx-build -W --keep-going -b doctest docs docs/_build/doctest
+```
+
+Open `docs/_build/html/index.html` to browse the generated site. Regenerate the
+guide plots and animations with `pdm run python docs/_scripts/generate_media.py`.
+Catalogue illustrations can be regenerated with
+`pdm run python docs/_scripts/extract_model_images.py`.
+Documentation requirements for Read the Docs are exported from the PDM lockfile:
+
+```shell
+pdm export -G docs -G all --without-hashes -o docs/requirements.txt
+```
 
 ## How it works
 
@@ -46,14 +72,14 @@ for i, label, in enumerate(['Theta (rad)', 'Omega (rad/s)']):
 plt.xlabel('Time (s)')
 plt.legend()
 ```
-![pendulum_states](pendulum_states.png)
+![pendulum_states](https://raw.githubusercontent.com/ggonzm/benchmark-systems/main/pendulum_states.png)
 
 ### Advanced models
 Other models can be expressed more conveniently as a set of differential-algebraic equations (DAE). We select [`solve-dae`](https://github.com/SolveDAE/solve_dae/tree/main) to solve these models because it uses almost the same interface as `scipy`, and aims to be integrated into `scipy` in the future. 
 
 For example, the model of a quadrotor can be expressed as a DAE or an ODE:
 
-![quadrotor](quadrotor.png)
+![quadrotor](https://raw.githubusercontent.com/ggonzm/benchmark-systems/main/quadrotor.png)
 
 ###### Image source: https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
 
@@ -91,7 +117,7 @@ for i, model in enumerate(['Newton-Euler model', 'Euler-Lagrange model']):
 axs[-1].set_xlabel('Time (s)')
 ```
 
-![quadrotor_states](quadrotor_states.png)
+![quadrotor_states](https://raw.githubusercontent.com/ggonzm/benchmark-systems/main/quadrotor_states.png)
 
 ## Symbolic models
 All the available models are also implemented in a symbolic way using `casadi`. The main advantage of this implementation comes when working with ODEs, where the symbolic model can be directly used to compute Jacobian matrices, in order to analyze dyncamis and design controllers. For example, instead of using the numerical quadrotor ODE, one can use its symbolic version:
@@ -189,7 +215,7 @@ for i, label in enumerate(['X (m)', 'Y (m)', 'Z (m)', 'Phi (rad)', 'Theta (rad)'
 plt.legend()
 plt.xlabel('Time (s)')
 ```
-![cl_quadrotor_states](cl_quadrotor_sim.png)
+![cl_quadrotor_states](https://raw.githubusercontent.com/ggonzm/benchmark-systems/main/cl_quadrotor_sim.png)
 
 The function `solve_ivp_casadi` is implemented in a way that switching between the symbolic and numerical versions of the models is almost straightforward. Its `t_eval` argument follows SciPy's output-grid convention and may omit the initial time, which avoids duplicate samples when concatenating piecewise simulations. For DAEs, the function `solve_dae_casadi` provides the same behavior.
 
@@ -216,6 +242,10 @@ for ref in refs:
     quadrotor_states = np.hstack([quadrotor_states, states.y])
 ```
 ## Animations
+Live simulation with external controllers and a browser viewer is developed
+separately in [bs-simulators](https://github.com/ggonzm/bs-simulators).
+The trajectory-based Matplotlib animations remain available here.
+
 The package also provides a simple way to animate the simulations. For example, the quadrotor simulation can be animated as follows:
 
 ```python
@@ -253,7 +283,7 @@ anim, _ = AutoAnimation(fig, Quadrotor(fig, axis_3d, axis_xy, axis_xz, axis_yz, 
                                        xyz_ref=np.repeat(refs.T, int(t_ref/dt), axis=1)[:, :stop_index]),
                     times=np.arange(1, stop_index + 1) * dt, speed=10, repeat=True)
 ```
-![quadrotor_animation](drone-lqr.gif)
+![quadrotor_animation](https://raw.githubusercontent.com/ggonzm/benchmark-systems/main/drone-lqr.gif)
 
 In essence, the `AutoAnimation` function receives a figure and a callable, which is responsible for drawing the system in the figure at each time step. In this case, the `Quadrotor` class is responsible for drawing the quadrotor in the figure, given its states and the reference trajectory. The animation can be customized with different parameters, such as the duration of the animation, the time step between frames, the speed of the animation, and whether it should repeat or not.
 
@@ -261,26 +291,40 @@ In essence, the `AutoAnimation` function receives a figure and a callable, which
 In the `examples` folder, you can find some Jupyter notebooks that show how to use the package to simulate and animate different systems.
 
 # Installation
-Currently, a prerelease version is available via TestPypi:
+The package is available on the
+[Python Package Index (PyPI)](https://pypi.org/project/benchmark-systems/).
+The numerical package can be installed with:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ benchmark-systems
+python -m pip install benchmark-systems
 ```
 
-This command will install the basic version of the package, which includes the numerical models. If you want to use the symbolic models, you need to install the package with the `sym` extra:
+This installs the numerical models and their NumPy, SciPy and `solve-dae`
+dependencies automatically from PyPI. Python 3.13 or later is required; an
+activated virtual environment keeps the installation isolated.
+
+For symbolic models and CasADi integration, select the `sym` extra:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ benchmark-systems[sym]
+python -m pip install "benchmark-systems[sym]"
 ```
 
-If you want to use the animations, you need to install the package with the `anim` extra:
+`[sym]` adds CasADi. Quotes protect the square brackets from interpretation
+by the shell.
+
+For trajectory animations, select the `anim` extra:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ benchmark-systems[anim]
+python -m pip install "benchmark-systems[anim]"
 ```
 
-Or you can install the package with all extras:
+`[anim]` adds Matplotlib while retaining the numerical models.
+
+For both optional features, select `all`:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ benchmark-systems[all]
+python -m pip install "benchmark-systems[all]"
 ```
+
+`[all]` includes CasADi and Matplotlib. See the installation guide in the
+documentation for virtual environments, version checks and source installs.

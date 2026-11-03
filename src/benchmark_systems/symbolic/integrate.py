@@ -1,27 +1,9 @@
 """
-CasADi-based integrators with an interface compatible with scipy's
-``solve_ivp`` and ``scipy_dae``'s ``solve_dae``.
- 
-CasADi 3.6.x and the semi-explicit DAE reformulation
-------------------------------------------------------
-CasADi 3.6.x IDAS does not support the ``'xdot'`` key in the DAE dict.
-Fully-implicit DAEs  G(t, x, ẋ, u) = 0  are handled by splitting the
-state vector into differential and algebraic parts according to the
-``n_diff`` attribute of the DAEFunction:
- 
-    x_diff  – first n_diff components  (have a true time derivative)
-    z_alg   – remaining components are purely algebraic (no derivative)
-              PLUS the derivatives of x_diff themselves
- 
-Concretely, for a DAE with n_diff differential states and n_alg algebraic:
- 
-    x  (CasADi 'x')  = x_diff          shape (n_diff,)
-    z  (CasADi 'z')  = [xdot_diff ; x_alg]   shape (n_diff + n_alg,)
-    ode               = z[:n_diff]      dx_diff/dt = z_diff
-    alg               = G(t, [x_diff; z_alg], z_diff, u) = 0
- 
-For fully differential DAEs (n_alg = 0, all components differential) this
-reduces to: z = xdot, ode = z, alg = G(t, x, z, u).
+CasADi integration helpers with SciPy-style output grids.
+
+Both helpers accept a constant control input and requested sample times,
+returning component-major NumPy trajectories. ODE models use a selected
+CasADi integrator; DAE models use IDAS with the wrapper's state split.
 """
  
 from __future__ import annotations
@@ -40,15 +22,30 @@ from .daes import DAEFunction
 @dataclass
 class IntegrationResult:
     """
-    Lightweight result object compatible with scipy's OdeResult.
- 
+    Sampled trajectory returned by the symbolic integration helpers.
+
     Attributes
     ----------
-    t   : np.ndarray  shape (n_times,)
-    y   : np.ndarray  shape (n_states, n_times)  – full state [x_diff ; x_alg]
-    yp  : np.ndarray  shape (n_states, n_times)  – ẋ trajectory; zeros for ODEs
+    t : numpy.ndarray
+        Requested output times, with shape (n_times,).
+    y : numpy.ndarray
+        Full state trajectory with shape (n_states, n_times), including any
+        algebraic states in their model-defined positions.
+    yp : numpy.ndarray
+        Derivative information with the same shape as y. ODE results contain
+        zeros, not evaluated derivatives. DAE results contain differential
+        derivatives and zero placeholders for algebraic entries at advanced
+        times; an explicitly requested initial column retains the supplied yp0.
     success : bool
+        True when the helper returns after successful integration.
     message : str
+        Completion message.
+
+    Notes
+    -----
+    Validation and backend failures can raise exceptions rather than return a
+    result with success=False. The helpers use SciPy-style trajectory array
+    orientation but do not implement every SciPy result field or solver option.
     """
     t:       np.ndarray
     y:       np.ndarray
@@ -115,21 +112,56 @@ def solve_ivp_casadi(f: ca.Function,
                      integrator: str = 'rk',
                      opts: dict | None = None) -> IntegrationResult:
     """
-    Integrate an ODE  ẋ = f(t, x, u)  using a CasADi integrator.
- 
+    Integrate a symbolic ODE with a constant input and requested sample times.
+
     Parameters
     ----------
-    f : ca.Function
-        CasADi Function  f(t, x, u) → dx  from the symbolic ODE constructors.
-    t_span : (t0, tf)
+    f : casadi.Function
+        CasADi model with named inputs t, x, u and output dx, as returned by
+        an ODE factory.
+    t_span : tuple of float
+        Finite forward time bounds (t0, tf), with tf > t0, in the model time
+        unit.
     y0 : array-like
-    u : scalar or array-like.  Constant control input.  Default 0.
-    t_eval : array-like.
-        Times at which to return the solution. Values must be strictly
-        increasing and lie within ``t_span``. Unlike the internal integration
-        grid, this sequence does not need to include ``t_span[0]``.
-    integrator : str.  ``'rk'`` (RK4), ``'cvodes'``, or ``'collocation'``.
-    opts : dict, optional.  Extra options for ``ca.integrator``.
+        Initial state at t0, with one finite value per model state.
+    t_eval : sequence of float
+        Nonempty, finite, strictly increasing output times inside t_span. The
+        initial time may be omitted.
+    u : float or sequence of float, optional
+        Constant model input. Supply all input components; the scalar default
+        0 does not broadcast to multi-input models.
+    integrator : str, optional
+        CasADi integrator plugin name. Default is 'rk'; alternatives include
+        'cvodes' and 'collocation' when available.
+    opts : dict or None, optional
+        Backend-specific options passed to ca.integrator. None uses the helper
+        defaults.
+
+    Returns
+    -------
+    IntegrationResult
+        Sampled solution with t of shape (n_times,) and y of shape (n_states,
+        n_times), plus success, message and a zero-filled yp placeholder.
+
+    Notes
+    -----
+    The model receives absolute time even though each interval is
+    integrated using local backend time. Returned times are exactly t_eval;
+    include tf when its state is needed. The input is constant for one call.
+    For piecewise inputs, call successive intervals and carry their final
+    states forward. Evaluate f separately if physical derivatives are needed;
+    the ODE result's yp array is not a derivative trajectory.
+
+    Invalid arguments and backend integration failures may raise exceptions.
+
+    Examples
+    --------
+    >>> from benchmark_systems.symbolic import pendulum, solve_ivp_casadi
+    >>> f = pendulum(m=1.0, L=1.0)
+    >>> result = solve_ivp_casadi(f, (0.0, 1.0), [0.1, 0.0],
+    ...                         t_eval=[0.0, 0.5, 1.0], u=0.0)
+    >>> result.y.shape
+    (2, 3)
     """
     integration_times, output_times, output_start = _evaluation_grid(
         t_span, t_eval
@@ -213,44 +245,61 @@ def solve_dae_casadi(F: DAEFunction,
                      u: float | Sequence[float] = 0.0,
                      opts: dict | None = None) -> IntegrationResult:
     """
-    Integrate a fully-implicit DAE  G(t, x, ẋ, u) = 0  using CasADi / IDAS.
- 
+    Integrate a symbolic DAE with IDAS and requested sample times.
+
     Parameters
     ----------
     F : DAEFunction
-        Object returned by the symbolic DAE constructors.  Its ``n_diff``
-        attribute controls the differential/algebraic splitting.
-    t_span : (t0, tf)
-    y0 : array-like.  Initial state vector (full: differential + algebraic).
-    yp0 : array-like.
-        Initial derivatives for the differential part; algebraic initial
-        guess for the algebraic part.
-    u : scalar or array-like.  Constant control input.  Default 0.
-    t_eval : array-like.
-        Times at which to return the solution. Values must be strictly
-        increasing and lie within ``t_span``. This sequence may omit
-        ``t_span[0]`` to simplify concatenating piecewise simulations.
-    opts : dict, optional.  Extra IDAS options.
- 
+        Model wrapper returned by a DAE factory; n_diff identifies its leading
+        differential-state block.
+    t_span : tuple of float
+        Finite forward time bounds (t0, tf), with tf > t0, in the model time
+        unit.
+    y0 : array-like
+        Full initial state at t0. Differential values and algebraic-state
+        guesses use the model state order.
+    yp0 : array-like
+        Full initial derivative vector, the same length as y0. Leading
+        differential entries provide derivative guesses; trailing algebraic
+        entries are not used as algebraic-state guesses.
+    t_eval : sequence of float
+        Nonempty, finite, strictly increasing output times inside t_span. The
+        initial time may be omitted.
+    u : float or sequence of float, optional
+        Constant model input with all input components. The scalar default 0
+        is intended for single-input models.
+    opts : dict or None, optional
+        CasADi IDAS options. None uses the helper tolerance defaults; choose
+        initialization options appropriate to the supplied initial state.
+
     Returns
     -------
     IntegrationResult
-        ``.yp`` is the derivative trajectory (zeros for algebraic components).
- 
+        Sampled solution with t of shape (n_times,) and full state and
+        derivative arrays y, yp of shape (n_states, n_times), plus success and
+        message.
+
     Notes
     -----
-    Semi-explicit reformulation used here (CasADi 3.6.x compatible):
- 
-      Let  nd = F.n_diff,  na = nx - nd.
- 
-      CasADi 'x'   = x_diff       (first nd components)
-      CasADi 'z'   = [xdot_diff ; x_alg]   (nd + na components)
-      ode           = z[:nd]       so  d(x_diff)/dt = z_diff = xdot_diff
-      alg           = G(t, [x_diff ; z_alg], z_diff, u) = 0   (nx equations)
- 
-    y0[nd:]   is the initial guess for the algebraic states.
-    yp0[:nd] is the initial guess for xdot_diff.
-    IDAS will refine both z_diff and z_alg to satisfy consistency at t0.
+    Use initial values consistent with the selected IDAS initialization
+    options. Algebraic-state guesses come from y0, not yp0. Returned columns
+    at an explicitly requested initial time copy y0 and yp0 unchanged.
+    At advanced times, yp contains differential derivatives and zero
+    placeholders for algebraic-state derivatives.
+
+    Input u is constant for each call. For successive intervals, carry the
+    final state and derivative estimates and include the preceding endpoint
+    in its output grid. Invalid arguments and backend failures may raise
+    exceptions.
+
+    Examples
+    --------
+    >>> from benchmark_systems.symbolic import double_cart_pendulum, solve_dae_casadi
+    >>> F = double_cart_pendulum(M=0.6, m1=0.2, m2=0.2, L1=0.5, L2=0.5)
+    >>> result = solve_dae_casadi(F, (0.0, 0.1), [0.0]*6, [0.0]*6,
+    ...                         t_eval=[0.0, 0.05, 0.1], u=0.0)
+    >>> result.y.shape, result.yp.shape
+    ((6, 3), (6, 3))
     """
     integration_times, output_times, output_start = _evaluation_grid(
         t_span, t_eval

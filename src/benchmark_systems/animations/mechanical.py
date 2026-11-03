@@ -10,6 +10,34 @@ from ._core import _initialized, _matching_trajectories, _trajectory
 
 
 def Pendulum(axis, *, L, theta, pivot=(0.0, 0.0)):
+    """Draw a torque-driven pendulum from its angle trajectory.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    L : float
+        Drawing length in m. Use a positive value, normally the model pendulum
+        length.
+    theta : array_like of shape (N,)
+        Pendulum angles in rad, measured from the downward vertical. Zero hangs
+        downward and pi points upward.
+    pivot : tuple of float, default=(0.0, 0.0)
+        Fixed pivot coordinates (x, y) in m, in the same drawing frame as the
+        bob.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+    """
     theta = _trajectory("theta", theta)
     px, py = pivot
     axis.set_xlim(px - L * 1.5, px + L * 1.5)
@@ -37,6 +65,36 @@ def Pendulum(axis, *, L, theta, pivot=(0.0, 0.0)):
 
 
 def DCMotor(axis, *, theta, omega, current):
+    """Draw motor-shaft position with speed and current indicators.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    theta : array_like of shape (N,)
+        Shaft angles in rad. A zero angle places the shaft marker at the top of
+        the rotor.
+    omega : array_like of shape (N,)
+        Shaft angular velocities in rad/s.
+    current : array_like of shape (N,)
+        Armature currents in A.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Indicator scales use the maximum absolute speed and current over the full
+    trajectory. Angle text is displayed in degrees; input angles remain radians.
+    The schematic dimensions are not physical motor dimensions.
+    """
     trajectories = _matching_trajectories(theta=theta, omega=omega, current=current)
     theta, omega, current = trajectories.values()
     axis.set_xlim(-2.5, 2.5)
@@ -87,6 +145,39 @@ def DCMotor(axis, *, theta, omega, current):
 
 
 def CartPendulum(axis, *, L, pos, theta, obstacles=()):
+    """Draw a cart and a single pendulum along sampled trajectories.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    L : float
+        Positive drawing length of the pendulum in m.
+    pos : array_like of shape (N,)
+        Cart positions in m. For the numerical cart-pendulum model, this is state
+        row 0.
+    theta : array_like of shape (N,)
+        Pendulum angles in rad from the downward vertical, normally state row 2
+        of the cart-pendulum model.
+    obstacles : iterable, default=()
+        Optional circular annotations as ((x, y), radius) pairs, with coordinates
+        and radius in m. An empty iterable draws none.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Axis limits are based on the entire cart trajectory and ``L``. Obstacles
+    only annotate the drawing; they do not introduce collision dynamics.
+    """
     trajectories = _matching_trajectories(pos=pos, theta=theta)
     pos, theta = trajectories.values()
     axis.set_xlim(np.min(pos) - L, np.max(pos) + L)
@@ -121,6 +212,37 @@ def CartPendulum(axis, *, L, pos, theta, obstacles=()):
 
 
 def MultiCartPendulum(axis, *, L, pos, thetas):
+    """Draw a cart carrying a chain of pendulum links.
+
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    L : array_like of shape (n_links,)
+        Positive finite drawing lengths in m, one per link. At least one link is
+        required.
+    pos : array_like of shape (N,)
+        Cart-position trajectory in m.
+    thetas : sequence of array_like of shape (N,)
+        One angle trajectory per link, ordered from the cart outward. Angles are
+        absolute orientations in rad from the downward vertical, not relative
+        joint angles.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    This scene supports both double and multilevel cart-pendulum results.
+    Geometry uses the supplied link lengths; cart and joint sizes are schematic.
+    """
     L = np.asarray(L, dtype=float)
     if L.ndim != 1 or L.size == 0 or not np.isfinite(L).all() or np.any(L <= 0):
         raise ValueError("L must contain positive finite pendulum lengths")
@@ -179,23 +301,38 @@ def MultiCartPendulum(axis, *, L, pos, thetas):
 
 
 def MultimassSpring(axis, *, K, thetas, u_true):
-    """
-    Multimass spring-disc system animation.
-
-    Draws the system as seen in the classic schematic: two stepper-motor
-    blocks on the left and right, N discs in perspective (ellipses viewed
-    slightly from the side) connected by zigzag springs along a common
-    horizontal shaft.  A dot on each disc rim shows the current angle.
+    """Draw rotating discs connected between two stepper motors.
 
     Parameters
     ----------
-    axis : plt.Axes
-    K : Sequence[float]
-        Spring constants (n+1 values; used only for layout, not drawn).
-    thetas : list of np.ndarray (N_frames,)
-        Angular position of each disc (rad).  theta=0 → dot at top.
-    u_true : list of np.ndarray (N_frames,) of length 2
-        True angular positions of the two stepper motors.
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    K : sequence of float
+        One spring constant in N m/rad per connection: n_discs + 1 entries. Only
+        the sequence length is used by this drawing; constant values do not
+        change the geometry.
+    thetas : sequence of array_like of shape (N,)
+        Angular-position trajectories in rad, one per disc. At least one disc is
+        required. Zero places each disc marker at its top.
+    u_true : sequence of two array_like of shape (N,)
+        Actual left and right motor positions in rad. Use the first two model
+        state trajectories, not the commanded position setpoints.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Disc positions follow the motor-position block in the model state vector.
+    Angle labels use degrees, while inputs remain radians. Spring shapes and
+    disc spacing are schematic and do not evaluate forces.
     """
     import matplotlib.patches as mp
     from matplotlib.patches import Ellipse, FancyArrowPatch

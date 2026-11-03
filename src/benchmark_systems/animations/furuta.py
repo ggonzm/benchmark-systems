@@ -10,37 +10,61 @@ def FurutaPendulum(axis_3d, axis_th=None, axis_om=None, axis_ph=None,
                    *, L1, L2,
                    theta1, theta2, omega1=None, omega2=None,
                    times=None, trail_len=60, fixed_view: tuple|None =None):
-    """
-    Furuta (rotary inverted pendulum) animation.
-
-    Main 3D view shows:
-    - Motor base (cylinder)
-    - Arm 1 (horizontal, rotates around Z axis with theta1)
-    - Arm 2 / pendulum (hangs from end of arm1, angle theta2 from downward
-      vertical; theta2=pi means pointing upright)
-    - Bob (mass at tip of arm2)
-    - Fading trail of the bob's recent path
-
-    Optional side panels (pass plt.Axes objects):
-    - axis_th : theta1 and theta2 vs time
-    - axis_om : omega1 and omega2 vs time
-    - axis_ph : phase portrait theta2 vs omega2
+    """Draw a Furuta pendulum with optional trajectory and phase panels.
 
     Parameters
     ----------
-    axis_3d  : Axes3D  main 3-D axis
-    axis_th  : plt.Axes or None
-    axis_om  : plt.Axes or None
-    axis_ph  : plt.Axes or None
-    L1       : float   arm1 length (m)
-    L2       : float   arm2/pendulum length (m)
-    theta1   : np.ndarray (N,)  arm rotation around Z (rad)
-    theta2   : np.ndarray (N,)  pendulum angle from downward vertical (rad)
-    omega1   : np.ndarray (N,) optional
-    omega2   : np.ndarray (N,) optional
-    times    : np.ndarray (N,) optional simulation times for the side panels
-    trail_len: int  number of past frames to show as trail (default 60)
-    fixed_view: tuple or None  (elev, azim) for fixed camera view (default None)
+    axis_3d : mpl_toolkits.mplot3d.axes3d.Axes3D
+        Main three-dimensional axes for the motor base, horizontal arm, pendulum
+        arm and bob trail.
+    axis_th : matplotlib.axes.Axes or None, default=None
+        Optional angle-history panel for theta1 and theta2. None omits this
+        panel.
+    axis_om : matplotlib.axes.Axes or None, default=None
+        Optional angular-velocity panel. Supplying it requires both omega1 and
+        omega2 trajectories.
+    axis_ph : matplotlib.axes.Axes or None, default=None
+        Optional theta2 versus omega2 phase portrait. Supplying it requires
+        omega2.
+    L1 : float
+        Positive horizontal-arm drawing length in m.
+    L2 : float
+        Positive pendulum-arm drawing length in m.
+    theta1 : array_like of shape (N,)
+        Horizontal-arm rotation about the vertical axis in rad.
+    theta2 : array_like of shape (N,)
+        Pendulum-arm angle in rad from downward vertical; pi points upward.
+    omega1 : array_like of shape (N,) or None, default=None
+        Horizontal-arm angular velocity in rad/s, required for axis_om and
+        otherwise optional.
+    omega2 : array_like of shape (N,) or None, default=None
+        Pendulum angular velocity in rad/s, required for axis_om or axis_ph and
+        otherwise optional.
+    times : array_like of shape (N,) or None, default=None
+        Time coordinates for the optional history panels, normally in s. None
+        uses sample indices. The supplied time values are not converted.
+    trail_len : int, default=60
+        Number of preceding samples retained in the bob trail, in addition to the
+        current point. Use a nonnegative integer.
+    fixed_view : tuple of float or None, default=None
+        Camera (elevation, azimuth) in degrees, reapplied at each frame. None
+        permits interactive camera changes.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Side panels derive limits and background curves from the full experiment.
+    Displayed angle text uses degrees; trajectory inputs and panel values use
+    radians. Motor-base dimensions are schematic.
     """
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     import matplotlib.pyplot as _plt

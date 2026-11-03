@@ -8,26 +8,39 @@ from ._process_components import BubblePopulation, DialGauge, Mixer, VerticalBar
 
 
 def JohanssonTanks(axis, *, h_max, heights, pumps, gammas):
-    """
-    Four-tank system (Johansson) process diagram animation.
-
-    Layout matches the reference diagram:
-      - Tank 1 (lower-left),  Tank 2 (lower-right)
-      - Tank 3 (upper-left),  Tank 4 (upper-right)
-      - Pump 1 (left):  (1-γ1)·q1 → tank1,  γ1·q1 → tank4 (CROSS: upper-right)
-      - Pump 2 (right): (1-γ2)·q2 → tank2,  γ2·q2 → tank3 (CROSS: upper-left)
-      - Tank 3 drains into tank 1;  Tank 4 drains into tank 2.
-
-    Water fills animate as true fractions of h_max.
-    Numeric labels on pump outputs and valve branches update every frame.
+    """Draw the crossed-feed Johansson four-tank process.
 
     Parameters
     ----------
-    axis : plt.Axes
-    h_max : sequence of 4 floats   [h1_max, h2_max, h3_max, h4_max]  (cm)
-    heights : list of 4 np.ndarray  [h1, h2, h3, h4]  (cm)
-    pumps : list of 2 np.ndarray        [u1, u2]  pump setpoints (0-100%)
-    gammas : list of 2 np.ndarray    [γ1, γ2]  valve fractions (0–1)
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    h_max : array_like of shape (4,)
+        Positive finite maximum tank heights in cm, ordered tank 1 through tank
+        4. These set the fill-height scales.
+    heights : sequence of four array_like of shape (N,)
+        Liquid-height trajectories in cm, ordered h1, h2, h3, h4.
+    pumps : sequence of two array_like of shape (N,)
+        Pump-command trajectories, normally percentages from 0 to 100. Branch
+        labels split these commands; pump gains are not used to calculate
+        physical flow rates.
+    gammas : sequence of two array_like of shape (N,)
+        Valve-split fractions gamma1 and gamma2, normally from 0 to 1.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Pump 1 feeds tank 1 and, through its gamma1 branch, tank 4. Pump 2 feeds
+    tank 2 and, through gamma2, tank 3. Tank 3 drains into tank 1 and tank 4
+    into tank 2. Fill fractions are clipped for drawing, not for simulation.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import Circle, Arc
@@ -266,14 +279,54 @@ def JohanssonTanks(axis, *, h_max, heights, pumps, gammas):
 
 def BatchBioreactor(axis, *, X, S, P, V, u=None, S_in=None,
                     V_max=None, X_max=None, S_max=None, P_max=None):
-    """
-    Batch bioreactor animation.
+    """Draw bioreactor volume, concentrations and optional feed annotations.
 
-    Rectangular vessel with rounded corners (single FancyBboxPatch, no clipping).
-    - Water level rises/falls with V
-    - Green bubbles (X), purple bubbles (P), sand-like sediment (S)
-    - Sliding bars on the right for X, S, P, V
-    - Rotating mixer, feed inlet arrow (u), and feed concentration label (S_in)
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    X : array_like of shape (N,)
+        Biomass-concentration trajectory, displayed in mol/L.
+    S : array_like of shape (N,)
+        Substrate-concentration trajectory, displayed in mol/L.
+    P : array_like of shape (N,)
+        Product-concentration trajectory, displayed in mol/L.
+    V : array_like of shape (N,)
+        Liquid-volume trajectory in m^3, used for vessel fill height.
+    u : array_like of shape (N,) or None, default=None
+        Optional feed-flow annotations in m^3/min. None omits the numeric feed-
+        flow text.
+    S_in : array_like of shape (N,) or None, default=None
+        Optional feed-substrate concentrations in mol/L. None omits the numeric
+        concentration text.
+    V_max : float or None, default=None
+        Positive volume display scale in m^3. None uses the maximum supplied V,
+        with a small positive floor.
+    X_max : float or None, default=None
+        Positive biomass display scale in mol/L. None uses the maximum X with a
+        small positive floor.
+    S_max : float or None, default=None
+        Positive substrate display scale in mol/L. None uses the maximum S with a
+        small positive floor.
+    P_max : float or None, default=None
+        Positive product display scale in mol/L. None uses the maximum P with a
+        small positive floor.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Concentration bubbles, substrate sediment and the mixer are visual
+    indicators, not additional model states. Display scales affect drawing
+    only; the helper does not reconcile inconsistent process-unit scales.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import FancyBboxPatch, Circle, Arc, Ellipse
@@ -461,12 +514,69 @@ def CSTR(axis, *, Ca, Cb, Tr, Tk, dQ=None,
          Tr_min=100.0, Tr_max=220.0,
          Tk_min=100.0, Tk_max=220.0,
          dQ_max_abs=8500.0):
-    """
-    CSTR animation.
+    """Draw a stirred-tank reactor with concentration and temperature indicators.
 
-    Rectangular rounded vessel. Ca/Cb as bubbles. Cooling jacket as
-    coloured zigzags (red→blue with |dQ|). Two circular gauges Tr/Tk.
-    Side bars for Ca and Cb.
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    Ca : array_like of shape (N,)
+        Reactant-concentration trajectory, displayed in mol/L.
+    Cb : array_like of shape (N,)
+        Product-concentration trajectory, displayed in mol/L.
+    Tr : array_like of shape (N,)
+        Reactor-temperature trajectory in degrees Celsius.
+    Tk : array_like of shape (N,)
+        Jacket-temperature trajectory in degrees Celsius.
+    dQ : array_like of shape (N,) or None, default=None
+        Optional raw heat-flow values for jacket colour and text. The annotation
+        divides each value by 1000 and labels it kW. None uses zero heat flow for
+        the drawing.
+    F : array_like of shape (N,) or None, default=None
+        Optional inlet/outlet-flow annotations, displayed as supplied with an L/h
+        suffix. None omits numeric flow text.
+    T_in : array_like of shape (N,) or None, default=None
+        Optional inlet-temperature annotations in degrees Celsius. None omits
+        numeric inlet-temperature text.
+    Ca_in : array_like of shape (N,) or None, default=None
+        Optional inlet-concentration annotations in mol/L. None omits numeric
+        inlet-concentration text.
+    Ca_max : float or None, default=None
+        Positive reactant display scale in mol/L. None uses the maximum Ca with a
+        small positive floor.
+    Cb_max : float or None, default=None
+        Positive product display scale in mol/L. None uses the maximum Cb with a
+        small positive floor.
+    Tr_min : float, default=100.0
+        Lower reactor-temperature gauge limit in degrees Celsius.
+    Tr_max : float, default=220.0
+        Upper reactor-temperature gauge limit in degrees Celsius; use a value
+        greater than Tr_min.
+    Tk_min : float, default=100.0
+        Lower jacket-temperature gauge limit in degrees Celsius.
+    Tk_max : float, default=220.0
+        Upper jacket-temperature gauge limit in degrees Celsius; use a value
+        greater than Tk_min.
+    dQ_max_abs : float, default=8500.0
+        Positive cooling-colour scale in the same raw units as dQ. Larger
+        cooling magnitudes turn the jacket from red toward blue up to this scale.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Drawing labels are annotations: the routine does not convert the CSTR
+    model's engineering scales into consistent flow or thermal-power units.
+    In particular, check the model's heat-flow scale before interpreting the
+    ``dQ / 1000`` label as kW. Bubbles and mixer motion are schematic.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import FancyBboxPatch, Circle, Arc, Ellipse
@@ -730,43 +840,68 @@ def OilWell(axis, *, x0, x1, x2, P_tt, w_out, u1, u2,
             w_G_in=None, P_at=None, P_ab=None, P_bh=None,
             rho_m=None, alpha_L=None,
             w_G_in_max=None, w_out_max=None):
-    """
-    Oil well process animation.
-
-    Draws a cross-section of the well matching the Jahanshahi schematic:
-    - Annulus (outer tube, gas-filled, pale yellow)
-    - Tubing (inner tube, crude oil + gas mixture, dark)
-    - Gas lift choke (left side) injects gas into the annulus
-    - Injection valve at the bottom of the annulus feeds into the tubing
-    - Production choke at the top outputs the oil-gas mixture
-
-    Animated elements
-    -----------------
-    - Annulus: small bright bubbles drift **downward** (gas sinking to injection
-      valve). Count and size scale with w_G_in.
-    - Tubing: small light bubbles drift **upward** through the dark crude oil.
-      Count and size scale with the injected gas flow. Crude level is always full.
-    - Sliding bar panel on the right shows all state/output variables.
-    - Pressure gauges (P_at, P_ab, P_tt, P_bh) update numerically each frame.
+    """Draw a gas-lift well with flow, pressure and mass indicators.
 
     Parameters
     ----------
-    axis : plt.Axes
-    x0   : np.ndarray (N,)  gas mass in annulus (kg)
-    x1   : np.ndarray (N,)  gas mass in tubing  (kg)
-    x2   : np.ndarray (N,)  liquid mass in tubing (kg)
-    P_tt : np.ndarray (N,)  tubing top pressure (bar)
-    w_out: np.ndarray (N,)  total mass flow out (kg/s)
-    u1   : np.ndarray (N,)  opening of production choke (0-1)
-    u2   : np.ndarray (N,)  opening of gas-lift choke (0-1)
-    w_G_in   : np.ndarray (N,) optional  inlet gas mass flow (kg/s)
-    P_at     : np.ndarray (N,) optional  annulus top pressure (bar)
-    P_ab     : np.ndarray (N,) optional  annulus bottom pressure (bar)
-    P_bh     : np.ndarray (N,) optional  bottom-hole pressure (bar)
-    rho_m    : np.ndarray (N,) optional  mixture density at tubing top
-    alpha_L  : np.ndarray (N,) optional  liquid volume fraction at tubing top
-    w_G_in_max  : float   scale for bubble count in annulus
-    w_out_max   : float   scale for bar display
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    x0 : array_like of shape (N,)
+        Gas mass in the annulus in kg, corresponding to model state row 0.
+    x1 : array_like of shape (N,)
+        Gas mass in the tubing in kg, corresponding to state row 1.
+    x2 : array_like of shape (N,)
+        Liquid mass in the tubing in kg, corresponding to state row 2.
+    P_tt : array_like of shape (N,)
+        Tubing-top pressure in bar, corresponding to state row 7.
+    w_out : array_like of shape (N,)
+        Produced mixture mass flow in kg/s, corresponding to state row 8.
+    u1 : array_like of shape (N,)
+        Production-choke opening fraction, normally from 0 to 1; this is the
+        first control input.
+    u2 : array_like of shape (N,)
+        Gas-lift-choke opening fraction, normally from 0 to 1; this is the second
+        control input.
+    w_G_in : array_like of shape (N,) or None, default=None
+        Optional annulus gas-inflow trajectory in kg/s, state row 3. None omits
+        its numeric text and uses a fixed bubble-intensity fraction of 0.5.
+    P_at : array_like of shape (N,) or None, default=None
+        Optional annulus-top pressure in bar, state row 4. None omits this gauge.
+    P_ab : array_like of shape (N,) or None, default=None
+        Optional annulus-bottom pressure in bar, state row 5. None omits this
+        gauge.
+    P_bh : array_like of shape (N,) or None, default=None
+        Optional bottom-hole pressure in bar, state row 6. None omits this gauge.
+    rho_m : array_like of shape (N,) or None, default=None
+        Optional tubing-top mixture density in kg/m^3, model state rho_m_tt at
+        row 9. None omits the density bar.
+    alpha_L : array_like of shape (N,) or None, default=None
+        Optional dimensionless tubing-top liquid volume fraction, model state
+        alpha_L_tt at row 10. None omits its bar.
+    w_G_in_max : float or None, default=None
+        Positive gas-inflow scale in kg/s for annulus bubble intensity. None uses
+        the maximum w_G_in when provided, otherwise 1.0. Supply a positive scale
+        for an all-zero inflow trajectory.
+    w_out_max : float or None, default=None
+        Optional production-flow scale in kg/s. Accepted by the interface, but
+        the current drawing does not use this value to change any artist.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Pressure and flow data are displayed in the stated units without model
+    recomputation. Annulus bubbles move downward, tubing bubbles upward;
+    neither represents tracked particles. Tubing bubble intensity follows
+    ``x1``. The drawing does not solve algebraic pressure constraints.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import FancyBboxPatch, Circle
@@ -1137,12 +1272,46 @@ def OilWell(axis, *, x0, x1, x2, P_tt, w_out, u1, u2,
 
 def pHNeutralization(axis, *, h, pH, h_max=25.0,
                      q1=None, q2=None, q3=None):
-    """
-    pH neutralization reactor animation.
+    """Draw neutralization-reactor height, pH and optional feed labels.
 
-    Rectangular rounded vessel. Fill colour changes with pH (red/green/blue).
-    pH circular gauge on the outlet pipe.
-    Inlet arrows q1/q2/q3 with optional numeric labels. Rotating mixer.
+    Parameters
+    ----------
+    axis : matplotlib.axes.Axes
+        Two-dimensional axes on which to draw the scene.
+    h : array_like of shape (N,)
+        Liquid-height trajectory in cm, normally model state row 2.
+    pH : array_like of shape (N,)
+        Dimensionless pH trajectory, normally algebraic state row 3. The helper
+        displays it without solving the chemical constraint.
+    h_max : float, default=25.0
+        Positive finite height display scale in cm for vessel fill and the height
+        gauge.
+    q1 : array_like of shape (N,) or None, default=None
+        Optional acid-feed annotations. Supplied values are displayed with a
+        cm^3/s suffix, without conversion. None omits the numeric label.
+    q2 : array_like of shape (N,) or None, default=None
+        Optional buffer-feed annotations in the same displayed flow scale as q1.
+        None omits the numeric label.
+    q3 : array_like of shape (N,) or None, default=None
+        Optional alkaline-feed annotations in the same displayed flow scale as
+        q1. None omits the numeric label.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Height and pH affect the vessel fill and colour; clipping is visual only.
+    Model flow docstrings use L/s, whereas this scene labels raw flows cm^3/s.
+    Reconcile the selected flow scale before interpreting those annotations.
+    Mixer motion is schematic and does not change the simulated solution.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import FancyBboxPatch, Circle, Arc, Ellipse
