@@ -1,6 +1,6 @@
 [project]
 name = "benchmark-systems"
-version = "1.1.0"
+version = "1.1.1"
 description = "Nonlinear benchmark models for numerical simulation, symbolic analysis and trajectory animation"
 authors = [
     {name = "Guzmán", email = "ggonzm@unileon.es"},
@@ -18,6 +18,7 @@ classifiers = [
 ]
 
 [project.urls]
+Documentation = "https://benchmark-systems.readthedocs.io/en/latest/"
 Source = "https://github.com/ggonzm/benchmark-systems"
 Issues = "https://github.com/ggonzm/benchmark-systems/issues"
 

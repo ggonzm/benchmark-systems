@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Link the README and package metadata to the online Read the Docs documentation.
+
 ## 1.1.0
 
 - Add installation instructions, runnable user guides, a model catalog and a
