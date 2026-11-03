@@ -1,24 +1,10 @@
 """
-CasADi symbolic formulations of all ODE benchmark models.
+CasADi factories for the numerical benchmark ODE models.
 
-Each function returns a CasADi Function  f(t, x, u, p)  that evaluates the
-right-hand side  ẋ = f(...)  of the ODE.  The same kwargs interface used in
-the scipy models is replicated so that callers can swap backends with minimal
-changes.
-
-All physical parameters are collected into a named CasADi parameter vector
-``p`` when building the function, enabling automatic differentiation, symbolic
-manipulation (linearisation, sensitivity analysis…) and direct use with
-CasADi integrators.
-
-Typical usage
--------------
->>> import casadi as ca
->>> from benchmark_systems.symbolic.odes import pendulum
->>> f = pendulum(m=1.0, L=2.0, drag=0.0)
->>> # Numerical evaluation
->>> x0 = [3.04, 0.0]
->>> f_val = f(0, x0, 0)          # returns DM column vector
+Physical parameters are bound when a factory is called. Each returned
+function has named inputs ``t``, ``x``, ``u`` and output ``dx``; there is no
+separate runtime parameter-vector input. Use the public imports from
+``benchmark_systems.symbolic``, including ``quadrotor_ode`` for the quadrotor.
 """
 
 from typing import Sequence
@@ -40,13 +26,36 @@ def _sym(name: str, n: int = 1) -> ca.SX:
 
 def pendulum(*, m: float, L: float, drag: float = 0.0) -> ca.Function:
     """
-    Simple pendulum.
+    Build a symbolic torque-driven point-mass pendulum.
 
-    States : [theta, omega]   (theta=pi → pointing up)
-    Inputs : u  – torque (scalar)
+    Parameters
+    ----------
+    m : float
+        Pendulum mass in kg; use a positive value.
+    L : float
+        Pivot-to-mass distance in m; use a positive value.
+    drag : float, optional
+        Rotational viscous damping in N m s/rad. Default is 0.
 
-    Returns a CasADi Function  f(t, x, u)  with signature
-        f : (1, 2, 1) → DM(2)
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with named inputs t, x, u and output dx of shape
+        (2, 1).
+
+    Notes
+    -----
+    State order is ``[theta, omega]``, in rad and rad/s. Zero angle hangs
+    downward; ``theta=pi`` points upward. Input ``u`` is scalar pivot torque
+    in N m. Time is in seconds. Physical parameters are fixed by this factory;
+    evaluate the returned function to obtain derivatives.
+
+    Examples
+    --------
+    >>> from benchmark_systems.symbolic import pendulum
+    >>> f = pendulum(m=1.0, L=1.0, drag=0.1)
+    >>> f(0.0, [0.0, 0.0], 0.0).shape
+    (2, 1)
     """
     t   = _sym('t')
     x   = _sym('x', 2)
@@ -68,10 +77,35 @@ def pendulum(*, m: float, L: float, drag: float = 0.0) -> ca.Function:
 
 def dc_motor(*, J: float, b: float, Ke: float, Kt: float, R: float, L: float) -> ca.Function:
     """
-    DC motor.
+    Build a symbolic DC motor with electrical and shaft dynamics.
 
-    States : [theta, omega, current]
-    Inputs : u – voltage (V)
+    Parameters
+    ----------
+    J : float
+        Rotor moment of inertia in kg m^2.
+    b : float
+        Shaft viscous friction coefficient in N m s/rad.
+    Ke : float
+        Back electromotive-force constant in V s/rad.
+    Kt : float
+        Motor torque constant in N m/A.
+    R : float
+        Armature resistance in ohm.
+    L : float
+        Armature inductance in H; distinct from a mechanical length.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with named inputs t, x, u and output dx of shape
+        (3, 1).
+
+    Notes
+    -----
+    State order is ``[theta, omega, current]``, in rad, rad/s and A.
+    Input ``u`` is armature voltage in V; time is in seconds. Evaluate the
+    returned function as ``f(t, x, u)``. Inertia and inductance must be
+    nonzero. Voltage, current and speed are not automatically saturated.
     """
     t = _sym('t')
     x = _sym('x', 3)
@@ -94,10 +128,32 @@ def dc_motor(*, J: float, b: float, Ke: float, Kt: float, R: float, L: float) ->
 
 def cart_pendulum(*, m: float, M: float, L: float, drag: float = 0.0) -> ca.Function:
     """
-    Cart-pendulum (Euler-Lagrange, no inertia, point mass).
+    Build a symbolic force-driven cart with a point-mass pendulum.
 
-    States : [x, dx, theta, omega]   (theta=pi → pointing up)
-    Inputs : u – force on cart (N)
+    Parameters
+    ----------
+    m : float
+        Pendulum point mass in kg.
+    M : float
+        Cart mass in kg.
+    L : float
+        Pendulum length in m.
+    drag : float, optional
+        Cart viscous friction coefficient in N s/m. Default is 0.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with named inputs t, x, u and output dx of shape
+        (4, 1).
+
+    Notes
+    -----
+    State order is ``[position, velocity, theta, omega]``, in m, m/s,
+    rad and rad/s. ``theta=pi`` is upright. Input ``u`` is cart force in N;
+    time is in seconds. Evaluate the function as ``f(t, x, u)``. Pendulum
+    inertia about its point mass, track stops and force saturation are not
+    added to the model.
     """
     t  = _sym('t')
     x  = _sym('x', 4)
@@ -130,10 +186,48 @@ def furuta_pendulum(*,
                     l1: float, l2 : float,
                     K: float) -> ca.Function:
     """
-    Furuta pendulum (rotary inverted pendulum).
+    Build a symbolic Furuta pendulum driven by motor voltage.
 
-    States : [theta1, theta2, omega1, omega2]   (theta2=pi → pointing up)
-    Inputs : u – DC Voltage (V)
+    Parameters
+    ----------
+    m1 : float
+        Horizontal motor-arm mass in kg.
+    L1 : float
+        Horizontal motor-arm length in m.
+    J1 : float
+        Motor-arm moment of inertia about its centre of mass in kg m^2.
+    b1 : float
+        Motor-arm rotational damping coefficient in N m s/rad.
+    m2 : float
+        Pendulum-arm mass in kg.
+    L2 : float
+        Pendulum-arm length in m. The current derivative expressions use l2
+        and J2 rather than L2.
+    J2 : float
+        Pendulum-arm moment of inertia about its centre of mass in kg m^2.
+    b2 : float
+        Pendulum-arm rotational damping coefficient in N m s/rad.
+    l1 : float
+        Motor-arm pivot-to-centre-of-mass distance in m; supplied explicitly.
+    l2 : float
+        Pendulum pivot-to-centre-of-mass distance in m; supplied explicitly.
+    K : float
+        Effective motor torque per applied voltage in N m/V; applied torque is
+        K*u.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with named inputs t, x, u and output dx of shape
+        (4, 1).
+
+    Notes
+    -----
+    State order is ``[theta1, theta2, omega1, omega2]``. Angles are in
+    rad and velocities in rad/s; ``theta2=0`` hangs downward and
+    ``theta2=pi`` is upright. Input ``u`` is motor voltage in V, and time is
+    in seconds. Centre-of-mass distances are not inferred from arm lengths.
+    Evaluate the function as ``f(t, x, u)`` with nonsingular inertia terms.
     """
     
     t  = _sym('t')
@@ -178,10 +272,35 @@ def multimass_spring(*,
                      K: Sequence[float],
                      d: Sequence[float]) -> ca.Function:
     """
-    N discs connected via springs, driven by two stepper motors.
+    Build a symbolic spring-coupled disc chain with two filtered motors.
 
-    States : [u1_true, u2_true, theta_1, …, theta_N, omega_1, …, omega_N]
-    Inputs : u – [setpoint_motor1, setpoint_motor2]
+    Parameters
+    ----------
+    tau : sequence of float
+        Two positive motor-position filter time constants in s.
+    I : sequence of float
+        N disc moments of inertia in kg m^2; use N >= 2.
+    K : sequence of float
+        N+1 torsional spring constants in N m/rad, including the two end
+        springs.
+    d : sequence of float
+        N rotational viscous damping coefficients in N m s/rad.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with 2+2*N states, two inputs and output dx of
+        shape (2+2*N, 1).
+
+    Notes
+    -----
+    State order is ``[u1_true, u2_true, theta1, ..., thetaN, omega1,
+    ..., omegaN]``. Motor positions and disc angles are in rad; disc speeds
+    are in rad/s. Input ``u=[setpoint_left, setpoint_right]`` contains motor
+    position commands in rad. The first two states obey first-order motor
+    filters and are not instantaneous copies of the commands. Time is in
+    seconds. Evaluate the model as ``f(t, x, u)`` with nonzero inertias and
+    positive time constants.
     """
     n  = len(I)          # number of masses
     nx = 2 + 2 * n       # full state dimension
@@ -232,10 +351,42 @@ def johansson(*,
               K: Sequence[float],
               h_max: Sequence[float]) -> ca.Function:
     """
-    Johansson four-tank system.
+    Build a symbolic Johansson four-tank model with pump and valve inputs.
 
-    States : [h1, h2, h3, h4]  (water heights, cm)
-    Inputs : u – [pump1 (0-100 %), pump2 (0-100 %), valve1 (0-1), valve2 (0-1)]
+    Parameters
+    ----------
+    A : sequence of float
+        Four tank cross-sectional areas in cm^2.
+    a : sequence of float
+        Four discharge-hole areas in cm^2.
+    K : sequence of float
+        Two pump gains converting each command to volumetric flow on the
+        cm^3/s balance scale.
+    h_max : sequence of float
+        Four maximum liquid heights in cm.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with four height states, four inputs and output dx
+        of shape (4, 1).
+
+    Notes
+    -----
+    States are ``[h1, h2, h3, h4]`` in cm; time is in seconds. The
+    symbolic input is ``[pump1, pump2, valve1, valve2]``: pump commands use
+    the 0-100 percent scale and valve fractions the 0-1 scale. This combines
+    the numerical model's separate ``u`` and ``gamma`` arguments. Pump 1
+    feeds tank 1 and crossed tank 4; pump 2 feeds tank 2 and crossed tank 3.
+    Height clipping and full-tank derivative guards are piecewise expressions,
+    which should be considered when selecting a linearization point.
+
+    Examples
+    --------
+    >>> from benchmark_systems.symbolic import johansson
+    >>> f = johansson(A=[50.0]*4, a=[0.2]*4, K=[1.0]*2, h_max=[30.0]*4)
+    >>> f(0.0, [10.0]*4, [25.0, 25.0, 0.5, 0.5]).shape
+    (4, 1)
     """
     g = Const.GRAVITY * 100   # cm/s²
 
@@ -276,10 +427,44 @@ def batch_bioreactor(*,
                      Y_x: float,
                      Y_p: float) -> ca.Function:
     """
-    Batch bioreactor (Haldane kinetics).
+    Build a symbolic fed batch bioreactor with Haldane growth kinetics.
 
-    States : [X, S, P, V]
-    Inputs : u – feed flow rate (m³/min)
+    Parameters
+    ----------
+    S_in : float
+        Substrate concentration in the feed, in mol/L.
+    mu_max : float
+        Maximum specific growth rate, on the chosen kinetic time scale (1/min
+        for the documented feed units).
+    K_m : float
+        Michaelis concentration constant, in the same mol/L scale as S.
+    K_i : float
+        Substrate-inhibition concentration constant, in the same mol/L scale
+        as S.
+    v : float
+        Product-formation coefficient in 1/min on the documented mol/L and
+        minute scale.
+    Y_x : float
+        Dimensionless biomass/substrate yield ratio on the source
+        concentration scale.
+    Y_p : float
+        Dimensionless product/substrate yield ratio on the source
+        concentration scale.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with named inputs t, x, u and output dx of shape
+        (4, 1).
+
+    Notes
+    -----
+    State order is ``[X, S, P, V]``: biomass, substrate and product
+    concentrations in the source mol/L scale, followed by volume in m^3.
+    Input ``u`` is feed flow in m^3/min; use minutes for time with this scale.
+    Evaluate the function as ``f(t, x, u)``. Positive volume is required for
+    dilution terms. Lower-bound clipping and derivative guards are part of
+    the expressions; they do not project a solver's state onto constraints.
     """
     t  = _sym('t')
     xv = _sym('x', 4)
@@ -316,10 +501,70 @@ def cstr(*,
          Cp_k: float, m_k: float,
          A: float, V: float, T_in: float, K_w: float, Ca_in: float) -> ca.Function:
     """
-    Continuous Stirred Tank Reactor (Arrhenius kinetics, 3 reactions).
+    Build a symbolic stirred-tank reactor with three reaction pathways.
 
-    States : [Ca, Cb, Tr, Tk]
-    Inputs : u – [F (L/h), dQ (kW)]
+    Parameters
+    ----------
+    K0_ab : float
+        A-to-B Arrhenius pre-exponential coefficient, in 1/h on the documented
+        balance scale.
+    Ea_ab : float
+        A-to-B activation energy in kJ/mol.
+    Hr_ab : float
+        A-to-B reaction enthalpy in kJ/mol.
+    K0_bc : float
+        B-to-products Arrhenius pre-exponential coefficient, in 1/h on the
+        documented balance scale.
+    Ea_bc : float
+        B-to-products activation energy in kJ/mol.
+    Hr_bc : float
+        B-to-products reaction enthalpy in kJ/mol.
+    K0_ad : float
+        A self-reaction Arrhenius coefficient in L/(mol h) for mol/L
+        concentrations and hour-based balances; its reaction term multiplies
+        Ca squared.
+    Ea_ad : float
+        A self-reaction activation energy in kJ/mol.
+    Hr_ad : float
+        A self-reaction enthalpy in kJ/mol.
+    rho : float
+        Reactor-content density in kg/L.
+    Cp : float
+        Reactor-content heat capacity in kJ/(kg K).
+    Cp_k : float
+        Jacket coolant heat capacity in kJ/(kg K).
+    m_k : float
+        Jacket coolant mass in kg.
+    A : float
+        Heat-transfer wall area in m^2.
+    V : float
+        Reactor volume in L.
+    T_in : float
+        Feed temperature in degrees Celsius.
+    K_w : float
+        Wall heat-transfer coefficient in kJ/(m^2 K h).
+    Ca_in : float
+        Feed concentration of species A in mol/L.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with four states, two inputs and output dx of
+        shape (4, 1).
+
+    Notes
+    -----
+    States are ``[Ca, Cb, Tr, Tk]``: concentrations in mol/L and
+    reactor/jacket temperatures in degrees Celsius. Arrhenius expressions
+    convert temperatures to kelvin internally. Input is ``[F, dQ]``.
+
+    Preserve the source parameter scale: ``F`` multiplies concentration and
+    temperature differences directly, without division by ``V``; ``dQ`` is
+    added to wall heat flow without a power-unit conversion. With hour-based
+    balances, F is a dilution rate in 1/h and dQ is heat flow in kJ/h. The
+    self-reaction coefficient then has units L/(mol h). Positive dQ heats
+    the jacket. Evaluate the function as ``f(t, x, u)`` after reconciling any
+    dimensional plant data with this balance scale.
     """
     t  = _sym('t')
     xv = _sym('x', 4)
@@ -361,11 +606,42 @@ def quadrotor(*,
               Ixx: float, Iyy: float, Izz: float,
               k: float, L: float, m: float, drag: float) -> ca.Function:
     """
-    Quadrotor – Newton-Euler formulation (ODE).
+    Build a symbolic Newton-Euler quadrotor ODE.
 
-    States : [x, y, z, phi, theta, psi, s, v, w, p, q, r]
-             (position, Euler angles, body-frame linear & angular velocities)
-    Inputs : u – [w1², w2², w3², w4²]  (squared propeller speeds)
+    Parameters
+    ----------
+    Ixx : float
+        Body-frame principal inertia about the x axis in kg m^2.
+    Iyy : float
+        Body-frame principal inertia about the y axis in kg m^2.
+    Izz : float
+        Body-frame principal inertia about the z axis in kg m^2.
+    k : float
+        Thrust coefficient: k times squared rotor speed gives thrust in N.
+    L : float
+        Centre-to-rotor arm length in m.
+    m : float
+        Vehicle mass in kg.
+    drag : float
+        Rotor yaw-torque coefficient: drag times squared rotor speed gives
+        torque in N m; not translational air drag.
+
+    Returns
+    -------
+    casadi.Function
+        Function f(t, x, u) with 12 states, four inputs and output dx of shape
+        (12, 1).
+
+    Notes
+    -----
+    Use the public import ``benchmark_systems.symbolic.quadrotor_ode``.
+    State order is ``[x, y, z, phi, theta, psi, s, v, w, p, q, r]``:
+    inertial positions in m, Euler angles in rad, body-frame linear speeds
+    in m/s and body-frame angular rates in rad/s. Input contains the four
+    squared rotor angular speeds, in (rad/s)^2 with compatible coefficients;
+    time is in seconds. Evaluate the function as ``f(t, x, u)``. Euler
+    coordinates are singular at cos(theta)=0; rotor saturation, rotor
+    dynamics and aerodynamic resistance are not included.
     """
     t  = _sym('t')
     xv = _sym('x', 12)

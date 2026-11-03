@@ -193,8 +193,10 @@ def quadrotor(t, states, states_dot, *,
     '''
     Quadrotor expressions obtained from Euler-Lagrange formalism.
     The code is based in the following references:
+
     - https://doi.org/10.1016/j.automatica.2009.10.018
     - https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
+
     Currently, no aerodynamic effects are considered.
 
     Parameters
@@ -310,7 +312,7 @@ def oil_well(t, x, x_dot, *,
         State variables [x0, x1, x2, w_G_in, P_at, P_ab, P_bh, P_tt, w_out, rho_m_tt, alpha_L_tt]. x0 is the gas mass in the annulus, x1 is the gas mass in the tubing, x2 is the liquid mass in the tubing.
         The other variables are intermediate variables calculated by the model. We don't care about their dynamics.
     x_dot : Sequence[float]
-        Derivatives of the state variables [x0_dot, x1_dot, x2_dot, *_].
+        Derivatives of the state variables ``[x0_dot, x1_dot, x2_dot, ...]``.
     
     Annulus parameters
     ------------------
@@ -379,6 +381,8 @@ def oil_well(t, x, x_dot, *,
     u : Sequence[float]
         Opening of chokes (0-1). u0 is the opening of the production choke and u1 is the opening of the gas-lift choke.
 
+    Notes
+    -----
     When solving the DAE, if working very close to an equilibrium point, rtol <= 1e-8 is recommended to avoid weird results in the intermediate variables.
     '''
 
@@ -497,9 +501,9 @@ def neutralization(t, x, x_dot, *,
     
     Reaction invariant concentrations
     ---------------------------------
-    Wa_i : float
+    Wa1, Wa2, Wa3 : float
         Reaction invariant concentration a in the i-th stream (in mol/L).
-    Wb_i : float
+    Wb1, Wb2, Wb3 : float
         Reaction invariant concentration b in the i-th stream (in mol/L).
     
     Dissociation constants

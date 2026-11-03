@@ -264,6 +264,8 @@ def johansson(t, h, *,
     gamma : Sequence[float], optional
         Valve openings (0-1). Default is [0.0, 0.0].
 
+    Notes
+    -----
     When solving the initial value problem, rtol <= 1e-6 is recommended in order to ensure tank saturations.
     '''
 
@@ -450,10 +452,14 @@ def quadrotor(t, states, *,
     '''
     Quadrotor expressions obtained from Newton-Euler formalism.
     The code is mainly based on:
+
     - https://doi.org/10.1155/2014/320526
+
     But it is also influenced by:
+
     - https://doi.org/10.1016/j.automatica.2009.10.018
     - https://es.mathworks.com/help/symbolic/derive-quadrotor-dynamics-for-nonlinearMPC.html
+
     Currently, no aerodynamic effects are considered.
 
     The axis system is the one of two last references, rather than the original presented in the first reference.

@@ -1,23 +1,11 @@
 """
-CasADi symbolic formulations of all DAE benchmark models.
- 
-Each function returns a CasADi Function that represents the implicit residual
- 
-    G(t, x, ẋ, u) = 0
- 
-in a form compatible with CasADi's DAE integrators (IDAS / COLLOCATION).
- 
-The interface mirrors the scipy-dae models so switching backends requires
-minimal changes.  A convenience wrapper :func:`dae_integrator` (defined at
-the bottom of the module) builds a ready-to-use ``ca.integrator`` object.
- 
-Typical usage
--------------
->>> import casadi as ca
->>> from benchmark_systems.symbolic.daes import double_cart_pendulum
->>> F = double_cart_pendulum(M=0.6, m1=0.2, m2=0.2, L1=0.5, L2=0.5)
->>> # F has signature  G(t, x, xdot, u) → residual
->>> integ = ca.integrator('integ', 'idas', F.dae_dict(), {'t0': 0, 'tf': 0.02})
+CasADi factories for benchmark systems in implicit form.
+
+Factories bind physical parameters and return ``DAEFunction`` wrappers with
+the state/input dimensions and differential-state count. The wrapper is
+callable as ``F(t, x, xdot, u)``; its ``fn`` attribute exposes the underlying
+CasADi function. Use the public imports from ``benchmark_systems.symbolic``,
+including ``quadrotor_dae`` for the quadrotor.
 """
  
 from typing import Sequence
@@ -35,18 +23,43 @@ def _sym(name: str, n: int = 1) -> ca.SX:
  
 class DAEFunction:
     """
-    Wrapper around a CasADi residual Function  G(t, x, xdot, u) = 0.
- 
+    Wrap a CasADi model and its differential/algebraic state split.
+
+    Model factories create this wrapper automatically. Construct it directly
+    when defining an additional model for ``solve_dae_casadi``.
+
+    Parameters
+    ----------
+    name : str
+        Name assigned to the underlying CasADi function.
+    t : casadi.SX
+        Scalar symbolic time.
+    x : casadi.SX
+        Symbolic full-state column vector, with differential states first.
+    xdot : casadi.SX
+        Symbolic full-state derivative column vector, the same size as x.
+    u : casadi.SX
+        Symbolic control-input column vector.
+    G : casadi.SX
+        Model expression with one equation per state, evaluated as G(t,x,xdot,u).
+    n_diff : int or None, optional
+        Size of the leading differential-state block. None means all states
+        are differential; trailing states, when present, are algebraic.
+
     Attributes
     ----------
-    fn : ca.Function
-        Evaluates the residual.  Signature: (t, x, xdot, u) → G.
+    fn : casadi.Function
+        Underlying function with named inputs t, x, xdot, u and output G.
     n_diff : int
-        Number of **differential** states (those that have a true time
-        derivative).  The remaining  nx - n_diff  states are purely
-        algebraic.  For all pendulum/quadrotor DAEs every state is
-        differential (n_diff = nx).  For neutralization, pH is algebraic
-        so n_diff = nx - 1.
+        Number of leading differential states. This is 3 for oil_well and
+        neutralization, and the full state count for the mechanical DAE models.
+
+    Notes
+    -----
+    ``state_size`` counts all states; ``input_size`` counts control entries.
+    Call the wrapper positionally to evaluate its CasADi function. Use ``fn``
+    for named evaluation or differentiation, and ``dae_dict()`` to obtain
+    the representation accepted by a CasADi integrator.
     """
  
     def __init__(self, name: str, t, x, xdot, u, G, n_diff: int | None = None):
@@ -62,6 +75,25 @@ class DAEFunction:
         self._nx   = nx
  
     def __call__(self, t_val, x_val, xdot_val, u_val):
+        """
+        Evaluate the model at the supplied time, state, derivatives and input.
+
+        Parameters
+        ----------
+        t_val : float or casadi expression
+            Time in the model's time unit.
+        x_val : array-like or casadi expression
+            Full state with state_size entries.
+        xdot_val : array-like or casadi expression
+            Full derivative vector, with state_size entries.
+        u_val : scalar, array-like or casadi expression
+            Control values with input_size entries.
+
+        Returns
+        -------
+        casadi.DM, casadi.SX or casadi.MX
+            Model-equation column vector, according to the argument types.
+        """
         return self.fn(t_val, x_val, xdot_val, u_val)
 
     @property
@@ -76,19 +108,30 @@ class DAEFunction:
  
     def dae_dict(self) -> dict:
         """
-        Return the dict suitable for ``ca.integrator('name', 'idas', dae_dict)``.
- 
-        Uses the same semi-explicit split as ``solve_dae_casadi``; see that
-        function's docstring for the full explanation.
- 
-        Usage example::
- 
-            F    = double_cart_pendulum(M=0.6, m1=0.2, m2=0.2, L1=0.5, L2=0.5)
-            dt   = 0.02
-            intg = ca.integrator('I', 'idas', F.dae_dict(), 0.0, [dt])
-            # x0    = initial differential states  (first F.n_diff components)
-            # z0    = [xdot_diff_guess ; x_alg_guess]
-            res  = intg(x0=x0, z0=z0, p=u_val)
+        Build the semi-explicit representation accepted by CasADi integrators.
+
+        Returns
+        -------
+        dict
+            Entries t, x, z, p, ode and alg. The differential state is x, p holds
+            control inputs, and z contains differential derivatives followed by
+            algebraic states.
+
+        Notes
+        -----
+        For nd=n_diff, initialize x0 with the first nd state entries and z0 with
+        the nd derivative guesses followed by algebraic-state guesses. The public
+        ``solve_dae_casadi`` helper manages this layout for you.
+
+        Examples
+        --------
+        >>> import casadi as ca
+        >>> from benchmark_systems.symbolic import double_cart_pendulum
+        >>> F = double_cart_pendulum(M=0.6, m1=0.2, m2=0.2, L1=0.5, L2=0.5)
+        >>> integrator = ca.integrator('example_dae', 'idas', F.dae_dict(), 0.0, [0.02])
+        >>> result = integrator(x0=[0.0]*6, z0=[0.0]*6, p=0.0)
+        >>> result['xf'].shape
+        (6, 1)
         """
         nd = self.n_diff
         na = self._nx - nd
@@ -119,11 +162,43 @@ def double_cart_pendulum(*,
                          M: float, m1: float, m2: float,
                          L1: float, L2: float) -> DAEFunction:
     """
-    Double inverted pendulum on a cart (Euler-Lagrange, DAE).
- 
-    States  : [x, theta1, theta2, dx, omega1, omega2]
-    State ẋ : [dx, dtheta1, dtheta2, ddx, dalpha1, dalpha2]
-    Inputs  : u – force on cart (N)
+    Build a symbolic double pendulum on a force-driven cart.
+
+    Parameters
+    ----------
+    M : float
+        Cart mass in kg.
+    m1 : float
+        First-link mass in kg.
+    m2 : float
+        Second-link mass in kg.
+    L1 : float
+        First-link length in m.
+    L2 : float
+        Second-link length in m.
+
+    Returns
+    -------
+    DAEFunction
+        Callable F(t, x, xdot, u) with six states, one input and n_diff=6; fn
+        evaluates a six-component CasADi residual.
+
+    Notes
+    -----
+    State order is ``[position, theta1, theta2, velocity, omega1,
+    omega2]``. Position/velocity units are m and m/s; angles and angular
+    velocities use rad and rad/s. Angles are absolute, with pi pointing up.
+    Input u is cart force in N and time is in seconds. Link centres of mass
+    are fixed at half length, with rod inertias computed from mass and length.
+    Friction is omitted. All states are differential; supply corresponding
+    derivatives when evaluating the returned wrapper.
+
+    Examples
+    --------
+    >>> from benchmark_systems.symbolic import double_cart_pendulum
+    >>> F = double_cart_pendulum(M=0.6, m1=0.2, m2=0.2, L1=0.5, L2=0.5)
+    >>> F(0.0, [0.0]*6, [0.0]*6, 0.0).shape
+    (6, 1)
     """
     t    = _sym('t')
     x    = _sym('x', 6)
@@ -176,10 +251,37 @@ def multilevel_cart_pendulum(*,
                               L: Sequence[float],
                                deltas: Sequence[float] | None = None) -> DAEFunction:
     """
-    N-level inverted pendulum on a cart (Euler-Lagrange, DAE).
- 
-    States  : [x, theta_1, …, theta_N, dx, omega_1, …, omega_N]
-    Inputs  : u – force on cart (N)
+    Build a symbolic serial N-link cart-pendulum model.
+
+    Parameters
+    ----------
+    M : float
+        Cart mass in kg.
+    m : sequence of float
+        N link masses in kg.
+    L : sequence of float
+        N link lengths in m, matching m.
+    deltas : sequence of float or None, optional
+        N+1 friction-law coefficients: cart first, then rotational joints. For
+        the implemented abs(deltas*velocities) magnitude law, use N s^2/m^2
+        for the cart and N m s^2/rad^2 for rotational joints. None disables
+        friction.
+
+    Returns
+    -------
+    DAEFunction
+        Callable F(t, x, xdot, u) with 2*(N+1) differential states, one input
+        and an equally sized residual.
+
+    Notes
+    -----
+    States are ``[position, theta1, ..., thetaN, velocity, omega1,
+    ..., omegaN]``. Use m, m/s, rad and rad/s, respectively, and seconds for
+    time. Input u is horizontal cart force in N. Angles are absolute with
+    pi upright. Each link's centre of mass is at half length. The friction
+    coefficients are used in a velocity-dependent magnitude law, not simply
+    as a constant diagonal viscous-damping matrix. Evaluate the wrapper as
+    ``F(t, x, xdot, u)`` with full-length state and derivative vectors.
     """
     np_pend = len(m)
     if len(L) != np_pend:
@@ -304,10 +406,43 @@ def quadrotor(*,
               Ixx: float, Iyy: float, Izz: float,
                k: float, L: float, m: float, drag: float) -> DAEFunction:
     """
-    Quadrotor – Euler-Lagrange formulation (DAE).
- 
-    States  : [x, y, z, phi, theta, psi, ẋ, ẏ, ż, φ̇, θ̇, ψ̇]
-    Inputs  : u – [w1², w2², w3², w4²]
+    Build a symbolic Euler-Lagrange quadrotor model.
+
+    Parameters
+    ----------
+    Ixx : float
+        Body-frame principal inertia about the x axis in kg m^2.
+    Iyy : float
+        Body-frame principal inertia about the y axis in kg m^2.
+    Izz : float
+        Body-frame principal inertia about the z axis in kg m^2.
+    k : float
+        Thrust coefficient: k times squared rotor speed gives thrust in N.
+    L : float
+        Centre-to-rotor arm length in m.
+    m : float
+        Vehicle mass in kg.
+    drag : float
+        Rotor yaw-torque coefficient: drag times squared rotor speed gives
+        torque in N m; not translational air drag.
+
+    Returns
+    -------
+    DAEFunction
+        Callable F(t, x, xdot, u) with 12 differential states, four inputs and
+        a 12-component residual.
+
+    Notes
+    -----
+    Use the public import ``benchmark_systems.symbolic.quadrotor_dae``.
+    State order is ``[x, y, z, phi, theta, psi, dx, dy, dz, dphi, dtheta,
+    dpsi]``: positions in m, angles in rad, inertial linear velocities in
+    m/s and Euler-angle rates in rad/s. These velocity coordinates differ
+    from the quadrotor ODE's body-frame velocities. Input contains four
+    squared rotor speeds, in (rad/s)^2 with compatible coefficients; time
+    is in seconds. Evaluate ``F(t, x, xdot, u)`` with all state derivatives.
+    Euler coordinates are singular at cos(theta)=0; aerodynamic resistance
+    and rotor dynamics are not included.
     """
     t    = _sym('t')
     xv   = _sym('x', 12)
@@ -399,11 +534,78 @@ def oil_well(*,
              P_res, avg_w_res, PI, GOR,
              mu, rho_L) -> DAEFunction:
     """
-    Oil-well model (Jahanshahi, 2012).
- 
-    States  : [x0, x1, x2, w_G_in, P_at, P_ab, P_bh, P_tt,
-               w_out, rho_m_tt, alpha_L_tt]
-    Inputs  : u – [u_prod (0-1), u_lift (0-1)]  choke openings
+    Build a symbolic gas-lift oil-well model.
+
+    Parameters
+    ----------
+    T_a : float
+        Annulus gas temperature in K.
+    V_a : float
+        Annulus gas volume in m^3.
+    L_a : float
+        Annulus length in m.
+    K_gs : float
+        Gas-lift choke coefficient, with effective area units m^2 for mass
+        flow kg/s, density kg/m^3 and pressure difference Pa.
+    K_inj : float
+        Injection choke coefficient, with effective area units m^2 on the same
+        SI mass-flow scale.
+    M_G : float
+        Gas molecular weight in kg/kmol.
+    P_gs : float
+        Gas-source pressure in bar; converted internally to Pa.
+    T_t : float
+        Tubing gas temperature in K.
+    D_t : float
+        Tubing diameter in m.
+    L_t : float
+        Tubing length in m.
+    V_t : float
+        Tubing volume in m^3.
+    epsilon : float
+        Pipe roughness in m.
+    K_pr : float
+        Production choke coefficient, with effective area units m^2 on the SI
+        mass-flow scale.
+    P_out : float
+        Wellhead outlet pressure in bar; converted internally to Pa.
+    S_bh : float
+        Bottom-hole cross-sectional area in m^2.
+    L_bh : float
+        Bottom-hole length in m.
+    P_res : float
+        Reservoir pressure in bar; converted internally to Pa.
+    avg_w_res : float
+        Average reservoir mass flow in kg/s, used in friction correlations.
+    PI : float
+        Reservoir productivity index in kg/(s Pa).
+    GOR : float
+        Gas-to-liquid mass-flow ratio, dimensionless.
+    mu : float
+        Liquid dynamic viscosity in Pa s.
+    rho_L : float
+        Liquid density in kg/m^3.
+
+    Returns
+    -------
+    DAEFunction
+        Callable F(t, x, xdot, u) with 11 states, two inputs and n_diff=3; fn
+        returns an 11-component residual.
+
+    Notes
+    -----
+    State order is ``[x0, x1, x2, w_G_in, P_at, P_ab, P_bh, P_tt,
+    w_out, rho_m_tt, alpha_L_tt]``. The first three states are gas mass in
+    the annulus, gas mass in the tubing and liquid mass in the tubing (kg).
+    Flow quantities use kg/s, pressure states bar, mixture density kg/m^3
+    and liquid volume fraction no units. Only the masses are differential.
+
+    Input is ``[production_choke, gas_lift_choke]``, with opening fractions
+    in 0-1; time is in seconds. Evaluate ``F(t, x, xdot, u)`` using the full
+    state and derivative vectors. Choke expressions produce mass flow in
+    kg/s. Preserve the reference parameter scaling and positive physical
+    gas volumes and densities. The symbolic friction expressions floor
+    Reynolds numbers at 1; the numerical backend does not.
     """
     import math
  
@@ -511,12 +713,61 @@ def neutralization(*,
                    pK1: float, pK2: float,
                    q1: float, d: float) -> DAEFunction:
     """
-    pH neutralization CSTR (DAE).
- 
-    States  : [Wa4, Wb4, h, pH]
-    Inputs  : u – alkaline flow rate q3 (L/s)
- 
-    pH is an algebraic variable; its derivative xdot[3] has no physical meaning.
+    Build a symbolic pH neutralization tank with an alkaline-flow input.
+
+    Parameters
+    ----------
+    A : float
+        Tank cross-sectional area, documented on the source cm^2 scale.
+    z : float
+        Outlet/sensor height offset, on the source cm scale.
+    Cv4 : float
+        Outlet-flow coefficient for Cv4*(h+z)**n, in L/(s cm^n) on the
+        documented source flow/length scale.
+    n : float
+        Dimensionless exponent in the outlet-flow law.
+    Wa1 : float
+        Reaction invariant a in the acid stream, in the source mol/L scale.
+    Wa2 : float
+        Reaction invariant a in the buffer stream, in the source mol/L scale.
+    Wa3 : float
+        Reaction invariant a in the alkaline stream, in the source mol/L
+        scale.
+    Wb1 : float
+        Reaction invariant b in the acid stream, in the source mol/L scale.
+    Wb2 : float
+        Reaction invariant b in the buffer stream, in the source mol/L scale.
+    Wb3 : float
+        Reaction invariant b in the alkaline stream, in the source mol/L
+        scale.
+    pK1 : float
+        First acid dissociation pK value, dimensionless.
+    pK2 : float
+        Second acid dissociation pK value, dimensionless.
+    q1 : float
+        Constant acid feed flow, documented on the source L/s scale.
+    d : float
+        Buffer feed flow q2, documented on the source L/s scale and bound as a
+        disturbance parameter.
+
+    Returns
+    -------
+    DAEFunction
+        Callable F(t, x, xdot, u) with four states, one input and n_diff=3; fn
+        returns a four-component residual.
+
+    Notes
+    -----
+    State order is ``[Wa4, Wb4, h, pH]``: two reaction invariants,
+    liquid height and outlet pH. The first three states are differential;
+    pH is algebraic and its derivative is unused. Invariants may be negative.
+    Input u is alkaline flow q3 on the same scale as q1 and d.
+
+    Source units are mol/L, cm, cm^2 and L/s, but the equations apply no
+    explicit litre-to-cm^3 conversion. Reconcile flow and geometry scaling
+    when supplying a new dimensional parameter set. Use a positive liquid
+    height and a consistent pH. Evaluate the wrapper as ``F(t, x, xdot, u)``;
+    changing the bound disturbance d requires rebuilding the model.
     """
     t    = _sym('t')
     xv   = _sym('x', 4)

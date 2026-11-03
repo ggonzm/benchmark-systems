@@ -1,7 +1,7 @@
 [project]
 name = "benchmark-systems"
-version = "1.0.7"
-description = "Open collection of model predictive control (MPC) benchmarking problems"
+version = "1.1.0"
+description = "Nonlinear benchmark models for numerical simulation, symbolic analysis and trajectory animation"
 authors = [
     {name = "Guzmán", email = "ggonzm@unileon.es"},
 ]
@@ -9,6 +9,17 @@ dependencies = ["scipy>=1.14.1", "solve-dae>=0.2.3", "numpy>=2.1.0"]
 requires-python = ">=3.13"
 readme = "README.md"
 license = {text = "MIT"}
+keywords = ["benchmark", "simulation", "control", "nonlinear-systems"]
+classifiers = [
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.urls]
+Source = "https://github.com/ggonzm/benchmark-systems"
+Issues = "https://github.com/ggonzm/benchmark-systems/issues"
 
 [project.optional-dependencies]
 anim = [
@@ -31,6 +42,12 @@ build-backend = "pdm.backend"
 [tool.pdm]
 distribution = true
 
+[tool.pdm.build]
+package-dir = "src"
+includes = ["src/benchmark_systems/"]
+source-includes = ["docs/", "tests/", "CITATION.cff", ".readthedocs.yaml", ".python-version"]
+excludes = ["docs/_build/**", "**/__pycache__/**", "**/*.pyc", "**/*.pyo"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config"
@@ -43,4 +60,9 @@ dev = [
     "matplotlib>=3.10.9",
     "control>=0.10.2",
     "pytest>=9.1.1",
+]
+docs = [
+    "sphinx<10,>=8",
+    "myst-parser<6,>=4",
+    "pydata-sphinx-theme<1,>=0.16",
 ]

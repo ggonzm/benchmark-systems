@@ -11,32 +11,53 @@ from ._core import _initialized, _vector_trajectory
 
 def Quadrotor(fig: plt.Figure, axis_3d: Axes3D, axis_xy: plt.Axes, axis_xz: plt.Axes, axis_yz: plt.Axes,
         *, L: float, xyz: np.ndarray, angles: np.ndarray, xyz_ref: np.ndarray | None = None, fixed_view: tuple | None = None) -> Callable:
-    '''
-    Creates a Quadrotor update function for the animation.
+    """Draw a quadrotor trajectory in 3D and three planar projections.
 
     Parameters
     ----------
-    fig : plt.Figure
-        Figure object for the animation.
-    axis_3d : Axes3D
-        3D axis object for the animation.
-    axis_xy : plt.Axes
-        XY projection axis object.
-    axis_xz : plt.Axes
-        XZ projection axis object.
-    axis_yz : plt.Axes
-        YZ projection axis object.
+    fig : matplotlib.figure.Figure
+        Figure owning the supplied axes.
+    axis_3d : mpl_toolkits.mplot3d.axes3d.Axes3D
+        Three-dimensional position and attitude view.
+    axis_xy : matplotlib.axes.Axes
+        Inertial x-y projection axes.
+    axis_xz : matplotlib.axes.Axes
+        Inertial x-z projection axes.
+    axis_yz : matplotlib.axes.Axes
+        Inertial y-z projection axes.
     L : float
-        Length of the arms of the quadrotor for visualization purposes, not necessarily related to the physical parameters of the system.
-    xyz : np.ndarray, shape (3, n_frames)
-        Component-major quadrotor positions.
-    angles : np.ndarray, shape (3, n_frames)
-        Component-major quadrotor angles (roll, pitch, yaw).
-    xyz_ref : np.ndarray, optional
-        Array with the reference position for the quadrotor (used for plotting a target point).
-    fixed_view : tuple, optional
-        If provided, sets a fixed view for the 3D plot (elevation, azimuth).
-    '''
+        Positive drawing arm length in m. It need not equal the physical model
+        arm length.
+    xyz : array_like of shape (3, N)
+        Component-major inertial positions in m, ordered x, y, z. For either
+        quadrotor model, use state rows 0 through 2.
+    angles : array_like of shape (3, N)
+        Component-major Euler angles in rad, ordered roll, pitch, yaw. For either
+        model, use state rows 3 through 5, not body angular velocities.
+    xyz_ref : array_like of shape (3, N) or None, default=None
+        Optional inertial reference positions in m, sampled on the same grid.
+        None omits the reference markers.
+    fixed_view : tuple of float or None, default=None
+        Camera (elevation, azimuth) in degrees, reapplied every frame. None
+        permits interactive camera changes.
+
+    Returns
+    -------
+    update : callable
+        Initialized callback ``update(frame)``. The zero-based integer frame
+        selects a sample and the callback returns the modified Matplotlib
+        artists. Frame zero is drawn before this factory returns.
+
+    Notes
+    -----
+    All supplied trajectories must be finite, nonempty and have the same
+    sample count ``N``. Repeat constant values over the sample grid.
+
+    Axis limits and trajectory trails use the full supplied position data.
+    Limits do not expand to include reference points outside that range.
+    Angle text uses degrees, while angle inputs remain radians. The callback
+    does not simulate a controller, rotor speeds or collision dynamics.
+    """
     xyz = _vector_trajectory("xyz", xyz)
     angles = _vector_trajectory("angles", angles)
     if xyz.shape[1] != angles.shape[1]:

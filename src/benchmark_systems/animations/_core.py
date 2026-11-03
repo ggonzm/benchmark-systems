@@ -126,51 +126,65 @@ def AutoAnimation(
     time_label=True, time_unit: Literal['s', 'min', 'hr'] = 's',
     time_fmt='.1f', *, times: Sequence[float] | None = None, **kwargs,
 ):
-    """Create a Matplotlib animation from a frame update callback.
-
-    Frame times may be supplied explicitly through ``times`` or generated from
-    the legacy ``duration`` and ``dt`` pair. The final frame is always included,
-    even when ``speed`` skips over its index.
+    """Create a Matplotlib animation from a sampled-scene callback.
 
     Parameters
     ----------
     fig : matplotlib.figure.Figure
-        Figure containing the animated artists.
+        Figure containing the artists to animate.
     update_fn : callable
-        Function receiving a frame index and returning modified artists.
-    duration : float, optional
-        Simulation duration used when ``times`` is omitted.
-    dt : float, optional
-        Simulation sample period used when ``times`` is omitted.
+        Callback ``update_fn(frame)`` accepting a zero-based sample index. Return
+        a Matplotlib artist, an iterable of artists, or None.
+    duration : float or None, default=None
+        Positive experiment duration for the legacy grid, used only when times
+        is None. Supply it in the same units as dt.
+    dt : float or None, default=None
+        Positive sample spacing for the legacy grid. Together with duration it
+        generates ``round(duration / dt)`` samples starting at zero; the duration
+        endpoint is not included. Ignored when times is supplied.
     speed : int, default=1
-        Number of simulation samples advanced per animation frame.
-    fps : float, optional
-        Playback frame rate. If omitted, it is inferred from the sample period
-        and capped at 60 frames per second.
+        Positive sample stride per animation frame. The last available sample
+        is included even when the stride would skip it.
+    fps : float or None, default=None
+        Positive playback frame rate in frames/s. None uses the inverse sample
+        spacing, or inverse median spacing for times, capped at 60 frames/s.
+        A single explicitly timed sample uses 1 frame/s by default.
     time_label : bool or matplotlib.text.Text, default=True
-        Create a time label, disable it, or update an existing text artist.
+        True creates a label at the bottom of the figure, False disables it,
+        and a Text instance reuses that text artist.
     time_unit : {'s', 'min', 'hr'}, default='s'
-        Unit displayed by the time label.
+        Time-label suffix only. Supply already-scaled time values; no conversion
+        is performed.
     time_fmt : str, default='.1f'
-        Format specification applied to displayed time values.
-    times : sequence of float, optional
-        Finite, strictly increasing simulation times.
-    **kwargs
-        Additional arguments forwarded to ``matplotlib.animation.FuncAnimation``.
+        Python format specification for each displayed time value.
+    times : array_like of shape (N,) or None, default=None
+        Explicit finite, nonempty, strictly increasing sample times. The callback
+        must support those N sample indices. None requires duration and dt.
+    **kwargs : dict
+        Options forwarded to matplotlib.animation.FuncAnimation, such as blit
+        and repeat. Repeat defaults to False unless explicitly supplied.
 
     Returns
     -------
     animation : matplotlib.animation.FuncAnimation
-        Configured animation instance.
-    frames : tuple[int, ...]
-        Simulation indices used as animation frames.
+        Configured animation. Keep a reference while displaying or saving it.
+    frames : tuple of int
+        Selected zero-based sample indices, including the last available sample.
 
     Raises
     ------
     ValueError
-        If timing, frame-rate, speed, or time-unit arguments are invalid.
+        If time values, timing arguments, speed, fps or time_unit are invalid.
     TypeError
-        If an update callback returns values other than Matplotlib artists.
+        If a callback result contains objects other than Matplotlib artists.
+
+    Notes
+    -----
+    Playback uses a constant wall-clock frame interval. Nonuniform sample times
+    change the labels but do not create nonuniform playback delays. Automatic
+    fps uses the numeric time spacing as seconds; set fps explicitly when using
+    another time scale. Neither speed nor fps changes the simulated trajectory.
+    Reserve a bottom figure margin when using the default time label.
     """
     if isinstance(speed, bool) or not isinstance(speed, (int, np.integer)) or speed < 1:
         raise ValueError("speed must be an integer greater than or equal to 1")
