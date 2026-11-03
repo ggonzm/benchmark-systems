@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.2
+
+- Update the publishing toolchain for compatibility with its HTTP dependencies.
+- Support manually retrying publication of an existing GitHub release.
+
 ## 1.1.1
 
 - Link the README and package metadata to the online Read the Docs documentation.
