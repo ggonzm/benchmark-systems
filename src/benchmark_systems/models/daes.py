@@ -95,8 +95,11 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     L : Sequence[float]
         Lengths of the pendulums.
     deltas : Sequence[float], optional
-        Friction coefficients. The first one corresponds to the friction between the cart and the ground, while the others correspond to the rotational friction of the pendulums.
-        Default is None.
+        N+1 linear viscous friction coefficients. The first is for cart motion
+        relative to the ground, in N s/m. The remaining coefficients are for
+        the rotational joints in order from the cart, in N m s/rad. Joint
+        torques oppose the relative angular velocity across each joint.
+        None disables friction.
     
     Control inputs
     --------------
@@ -124,7 +127,7 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
     if deltas is not None:
         if len(deltas) != npendulums + 1:
             raise ValueError("deltas must contain one coefficient for the cart and each pendulum")
-        f = np.abs(np.asarray(deltas) * np.concatenate([[dx], omegas]))
+        f = deltas
     else:
         f = np.zeros(npendulums + 1)
 
@@ -166,8 +169,8 @@ def multilevel_cart_pendulum(t, x, x_dot, *,
             
     H2 = H2_diag + H2_tri_sup + H2_tri_inf
     for i in range(1, npendulums): # Add friction terms to the first elements on the right and bottom of the diagonal
-        H2[i, i+1] += f[i]
-        H2[i+1, i] += f[i]
+        H2[i, i+1] += f[i+1]
+        H2[i+1, i] += f[i+1]
     
     # h3
     h3 = np.array([0] + [a[i]*g*sin(thetas[i]) for i in range(npendulums)])
@@ -251,7 +254,7 @@ def quadrotor(t, states, states_dot, *,
     R = np.array([[cos(psi)*cos(theta), cos(psi)*sin(theta)*sin(phi) - sin(psi)*cos(phi), cos(psi)*sin(theta)*cos(phi) + sin(psi)*sin(phi)],
                   [sin(psi)*cos(theta), sin(psi)*sin(theta)*sin(phi) + cos(psi)*cos(phi), sin(psi)*sin(theta)*cos(phi) - cos(psi)*sin(phi)],
                   [        -sin(theta),                              cos(theta)*sin(phi),                              cos(theta)*cos(phi)]])
-    # Rotation matrix (relates angular velocities in the body frame to the inertial frame)
+    # Map Euler angle rates to body-frame angular velocity.
     W = np.array([[1,         0,         -sin(theta)], # type: ignore
                   [0,  cos(phi), cos(theta)*sin(phi)],
                   [0, -sin(phi), cos(theta)*cos(phi)]])
@@ -259,7 +262,7 @@ def quadrotor(t, states, states_dot, *,
     J = np.array([[Ixx, 0, 0], # type: ignore
                   [0, Iyy, 0],
                   [0, 0, Izz]])
-    # Moment of inertia matrix realted to the inertial frame
+    # Inertia in Euler coordinates.
     M = W.T @ J @ W
     # Coriolis matrix
     c11 = 0
@@ -269,7 +272,7 @@ def quadrotor(t, states, states_dot, *,
     c22 = (Izz - Iyy)*phi_dot*cos(phi)*sin(phi)
     c23 = -Ixx*psi_dot*sin(theta)*cos(theta) + Iyy*psi_dot*sin(phi)**2*cos(theta)*sin(theta) + Izz*psi_dot*cos(phi)**2*cos(theta)*sin(theta)
     c31 = -c13 - Ixx*theta_dot*cos(theta)
-    c32 = (Izz - Iyy)*(theta_dot*cos(phi)*sin(phi)*sin(theta) + phi_dot*sin(phi)**2*cos(theta)) + (Iyy - Izz)*psi_dot*cos(phi)**2*cos(theta) - c23
+    c32 = (Izz - Iyy)*(theta_dot*cos(phi)*sin(phi)*sin(theta) + phi_dot*sin(phi)**2*cos(theta)) + (Iyy - Izz)*phi_dot*cos(phi)**2*cos(theta) - c23
     c33 = (Iyy - Izz)*phi_dot*cos(phi)*sin(phi)*cos(theta)**2 - (
         Iyy*theta_dot*sin(phi)**2*cos(theta)*sin(theta) + Izz*theta_dot*cos(phi)**2*cos(theta)*sin(theta) - Ixx*theta_dot*sin(theta)*cos(theta)
     )
@@ -289,7 +292,10 @@ def quadrotor(t, states, states_dot, *,
     # ddx, ddy, ddz
     g[6:9] = np.array([0, 0, -Const.GRAVITY]) + R @ np.array([0, 0, F/m]) - np.array([dx_dot, dy_dot, dz_dot])
     # ddphi, ddtheta, ddpsi
-    g[9:12] = np.linalg.inv(M) @ (np.array([tau_phi, tau_theta, tau_psi]) - C @ np.array([dphi, dtheta, dpsi])) - np.array([dphi_dot, dtheta_dot, dpsi_dot])
+    # Project body-frame torques into the Euler coordinates used by M.
+    euler_torque = W.T @ np.array([tau_phi, tau_theta, tau_psi])
+    angular_acceleration = np.linalg.solve(M, euler_torque - C @ np.array([dphi, dtheta, dpsi]))
+    g[9:12] = angular_acceleration - np.array([dphi_dot, dtheta_dot, dpsi_dot])
     
     return g
 
@@ -495,7 +501,7 @@ def neutralization(t, x, x_dot, *,
     z : float
         Vertical distance between the bottom of the reactor and the pH sensor (in cm).
     Cv4 : float
-        Height-output flow rate coefficient.
+        Outlet-flow coefficient for Cv4*(h+z)**n, in mL/(s cm^n).
     n : float
         Exponent of the height.
     
@@ -516,14 +522,14 @@ def neutralization(t, x, x_dot, *,
     Inlet flows
     -----------
     q1 : float
-        Acid stream flow rate (in L/s). Constant.
+        Acid stream flow rate (in mL/s). Constant.
     d : float
-        Buffer stream flow rate (in L/s). Disturbance.
+        Buffer stream flow rate (in mL/s). Disturbance.
 
     Control inputs
     --------------
     u : float
-        Alkaline stream flow rate (in L/s). Valve-regulated.
+        Alkaline stream flow rate (in mL/s). Valve-regulated.
     '''
 
     Wa4, Wb4, h, pH = x

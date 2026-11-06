@@ -20,9 +20,9 @@ def JohanssonTanks(axis, *, h_max, heights, pumps, gammas):
     heights : sequence of four array_like of shape (N,)
         Liquid-height trajectories in cm, ordered h1, h2, h3, h4.
     pumps : sequence of two array_like of shape (N,)
-        Pump-command trajectories, normally percentages from 0 to 100. Branch
-        labels split these commands; pump gains are not used to calculate
-        physical flow rates.
+        Pump-command trajectories on the 0 to 100 percent scale. Pump labels
+        show the commands, and branch labels show their shares on that same
+        scale after applying the valve fractions.
     gammas : sequence of two array_like of shape (N,)
         Valve-split fractions gamma1 and gamma2, normally from 0 to 1.
 
@@ -176,7 +176,7 @@ def JohanssonTanks(axis, *, h_max, heights, pumps, gammas):
     _valve(V1x, V1y, orientation='right');  _valve(V2x, V2y, orientation='left')
 
     # ── static pipes ─────────────────────────────────────────────────────────
-    # u1/u2 input arrows from outside
+    # Pump input arrows from outside
     _arr(-0.3, Pu1y, Pu1x-R_P-0.02, Pu1y)
     _arr(10.3, Pu2y, Pu2x+R_P+0.02, Pu2y)
     ax.text(-0.35, Pu1y, 'u1', ha='right', va='center',
@@ -259,14 +259,15 @@ def JohanssonTanks(axis, *, h_max, heights, pumps, gammas):
             wp.set_height(h_plot)
 
         # numeric labels
-        u1v = float(pumps[0][frame]); u2v = float(pumps[1][frame])
+        u1v = float(pumps[0][frame])
+        u2v = float(pumps[1][frame])
         g1v = float(gammas[0][frame]); g2v = float(gammas[1][frame])
-        lbl_q1.set_text(f'{u1v:.1f}')
-        lbl_1g1q1.set_text(f'{(1-g1v)*u1v:.1f}')
-        lbl_g1q1.set_text(f'{g1v*u1v:.1f}')
-        lbl_q2.set_text(f'{u2v:.1f}')
-        lbl_1g2q2.set_text(f'{(1-g2v)*u2v:.1f}')
-        lbl_g2q2.set_text(f'{g2v*u2v:.1f}')
+        lbl_q1.set_text(f'{u1v:.1f}%')
+        lbl_1g1q1.set_text(f'{(1-g1v)*u1v:.1f}%')
+        lbl_g1q1.set_text(f'{g1v*u1v:.1f}%')
+        lbl_q2.set_text(f'{u2v:.1f}%')
+        lbl_1g2q2.set_text(f'{(1-g2v)*u2v:.1f}%')
+        lbl_g2q2.set_text(f'{g2v*u2v:.1f}%')
         lbl_gamma1.set_text(f'{g1v:.2f}')
         lbl_gamma2.set_text(f'{g2v:.2f}')
         for i in range(4):
@@ -529,12 +530,13 @@ def CSTR(axis, *, Ca, Cb, Tr, Tk, dQ=None,
     Tk : array_like of shape (N,)
         Jacket-temperature trajectory in degrees Celsius.
     dQ : array_like of shape (N,) or None, default=None
-        Optional raw heat-flow values for jacket colour and text. The annotation
-        divides each value by 1000 and labels it kW. None uses zero heat flow for
-        the drawing.
+        Optional signed jacket heat-flow values in kJ/h. Negative values cool
+        the jacket. The annotation converts each value to kW. None uses zero
+        heat flow for the drawing.
     F : array_like of shape (N,) or None, default=None
-        Optional inlet/outlet-flow annotations, displayed as supplied with an L/h
-        suffix. None omits numeric flow text.
+        Optional volumetric inlet/outlet flow in L/h. Multiply the model's
+        dilution rate by the reactor volume in L to obtain this trajectory.
+        None omits numeric flow text.
     T_in : array_like of shape (N,) or None, default=None
         Optional inlet-temperature annotations in degrees Celsius. None omits
         numeric inlet-temperature text.
@@ -558,7 +560,7 @@ def CSTR(axis, *, Ca, Cb, Tr, Tk, dQ=None,
         Upper jacket-temperature gauge limit in degrees Celsius; use a value
         greater than Tk_min.
     dQ_max_abs : float, default=8500.0
-        Positive cooling-colour scale in the same raw units as dQ. Larger
+        Positive cooling-colour scale in kJ/h. Larger
         cooling magnitudes turn the jacket from red toward blue up to this scale.
 
     Returns
@@ -573,10 +575,7 @@ def CSTR(axis, *, Ca, Cb, Tr, Tk, dQ=None,
     All supplied trajectories must be finite, nonempty and have the same
     sample count ``N``. Repeat constant values over the sample grid.
 
-    Drawing labels are annotations: the routine does not convert the CSTR
-    model's engineering scales into consistent flow or thermal-power units.
-    In particular, check the model's heat-flow scale before interpreting the
-    ``dQ / 1000`` label as kW. Bubbles and mixer motion are schematic.
+    Bubbles and mixer motion are schematic.
     """
     import matplotlib.patches as _mp
     from matplotlib.patches import FancyBboxPatch, Circle, Arc, Ellipse
@@ -800,7 +799,7 @@ def CSTR(axis, *, Ca, Cb, Tr, Tk, dQ=None,
         xs_r[[0,-1]] = JAC_XR
         jac_r.set_data(xs_r, jac_ys); jac_r.set_color(jcol)
         dQ_lbl.set_color(jcol)
-        dQ_lbl.set_text(f'dQ={dq/1000:.1f} kW')
+        dQ_lbl.set_text(f'dQ={dq/3600:.1f} kW')
 
         # bubbles Ca
         fca = np.clip(float(Ca[frame])/_Camax, 0, 1)
@@ -1287,14 +1286,14 @@ def pHNeutralization(axis, *, h, pH, h_max=25.0,
         Positive finite height display scale in cm for vessel fill and the height
         gauge.
     q1 : array_like of shape (N,) or None, default=None
-        Optional acid-feed annotations. Supplied values are displayed with a
-        cm^3/s suffix, without conversion. None omits the numeric label.
+        Optional acid-feed trajectory in mL/s, displayed as supplied.
+        None omits the numeric label.
     q2 : array_like of shape (N,) or None, default=None
-        Optional buffer-feed annotations in the same displayed flow scale as q1.
+        Optional buffer-feed trajectory in mL/s, displayed as supplied.
         None omits the numeric label.
     q3 : array_like of shape (N,) or None, default=None
-        Optional alkaline-feed annotations in the same displayed flow scale as
-        q1. None omits the numeric label.
+        Optional alkaline-feed trajectory in mL/s, displayed as supplied.
+        None omits the numeric label.
 
     Returns
     -------
@@ -1309,8 +1308,7 @@ def pHNeutralization(axis, *, h, pH, h_max=25.0,
     sample count ``N``. Repeat constant values over the sample grid.
 
     Height and pH affect the vessel fill and colour; clipping is visual only.
-    Model flow docstrings use L/s, whereas this scene labels raw flows cm^3/s.
-    Reconcile the selected flow scale before interpreting those annotations.
+    Flow values in mL/s are numerically identical to values in cm^3/s.
     Mixer motion is schematic and does not change the simulated solution.
     """
     import matplotlib.patches as _mp
@@ -1478,7 +1476,7 @@ def pHNeutralization(axis, *, h, pH, h_max=25.0,
 
         # flow labels
         for key,(lbl,arr) in q_lbls.items():
-            lbl.set_text(f'{float(arr[frame]):.1f} cm³/s')
+            lbl.set_text(f'{float(arr[frame]):.1f} mL/s')
 
         # mixer
         blade_y = BY + fh*BLADE_Y_FRAC

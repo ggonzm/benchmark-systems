@@ -262,10 +262,11 @@ def multilevel_cart_pendulum(*,
     L : sequence of float
         N link lengths in m, matching m.
     deltas : sequence of float or None, optional
-        N+1 friction-law coefficients: cart first, then rotational joints. For
-        the implemented abs(deltas*velocities) magnitude law, use N s^2/m^2
-        for the cart and N m s^2/rad^2 for rotational joints. None disables
-        friction.
+        N+1 linear viscous friction coefficients. The first is for cart motion
+        relative to the ground, in N s/m. The remaining coefficients are for
+        the rotational joints in order from the cart, in N m s/rad. Joint
+        torques oppose the relative angular velocity across each joint.
+        None disables friction.
 
     Returns
     -------
@@ -276,11 +277,10 @@ def multilevel_cart_pendulum(*,
     Notes
     -----
     States are ``[position, theta1, ..., thetaN, velocity, omega1,
-    ..., omegaN]``. Use m, m/s, rad and rad/s, respectively, and seconds for
-    time. Input u is horizontal cart force in N. Angles are absolute with
-    pi upright. Each link's centre of mass is at half length. The friction
-    coefficients are used in a velocity-dependent magnitude law, not simply
-    as a constant diagonal viscous-damping matrix. Evaluate the wrapper as
+    ..., omegaN]``. Position is in m, angles in rad, cart velocity in m/s,
+    angular velocities in rad/s, and time in seconds. Input u is horizontal
+    cart force in N. Angles are absolute with pi upright. Each link's centre
+    of mass is at half length. Evaluate the wrapper as
     ``F(t, x, xdot, u)`` with full-length state and derivative vectors.
     """
     np_pend = len(m)
@@ -310,11 +310,10 @@ def multilevel_cart_pendulum(*,
     l  = [L[i] / 2 for i in range(np_pend)]
     J  = [m[i] * l[i]**2 / 3 for i in range(np_pend)]
  
-    # Friction vector (simplified: proportional to velocity norm, always ≥ 0)
+    # Friction vector (simplified: proportional to velocity)
     if deltas is not None:
         # f[0]: cart–ground friction, f[i+1]: rotational friction of pendulum i
-        all_vel = ca.vertcat(dx, *omegas)
-        f = [float(deltas[i]) * ca.fabs(all_vel[i]) for i in range(np_pend + 1)]
+        f = deltas
     else:
         f = [0.0] * (np_pend + 1)
  
@@ -379,8 +378,8 @@ def multilevel_cart_pendulum(*,
  
     H2 = H2_diag + H2_sup + H2_inf
     for i in range(1, np_pend):
-        H2[i, i + 1] = H2[i, i + 1] + f[i]
-        H2[i + 1, i] = H2[i + 1, i] + f[i]
+        H2[i, i + 1] = H2[i, i + 1] + f[i+1]
+        H2[i + 1, i] = H2[i + 1, i] + f[i+1]
  
     vel_vec = ca.vertcat(dx, *[-omegas[i] for i in range(np_pend)])
  
@@ -493,7 +492,7 @@ def quadrotor(*,
            + Izz*dpsi*cp**2*ct*st)
     c31 = -c13 - Ixx*dtheta*ct
     c32 = ((Izz-Iyy)*(dtheta*cp*sp*st + dphi*sp**2*ct)
-           + (Iyy-Izz)*dpsi*cp**2*ct - c23)
+           + (Iyy-Izz)*dphi*cp**2*ct - c23)
     c33 = ((Iyy-Izz)*dphi*cp*sp*ct**2
            - (Iyy*dtheta*sp**2*ct*st
               + Izz*dtheta*cp**2*ct*st
@@ -513,9 +512,9 @@ def quadrotor(*,
     g_lin = (ca.vertcat(0, 0, -Const.GRAVITY)
              + R @ ca.vertcat(0, 0, F / m)
              - ca.vertcat(ddx, ddy, ddz))
-    g_ang = (ca.solve(M_mat,
-                      ca.vertcat(tau_phi, tau_theta, tau_psi)
-                      - C_mat @ ang_vel)
+    # Project body-frame torques into the Euler coordinates used by M_mat.
+    euler_torque = W.T @ ca.vertcat(tau_phi, tau_theta, tau_psi)
+    g_ang = (ca.solve(M_mat, euler_torque - C_mat @ ang_vel)
              - ca.vertcat(ddphi, ddth, ddpsi))
  
     G = ca.vertcat(g_ode, g_lin, g_ang)
@@ -722,8 +721,7 @@ def neutralization(*,
     z : float
         Outlet/sensor height offset, on the source cm scale.
     Cv4 : float
-        Outlet-flow coefficient for Cv4*(h+z)**n, in L/(s cm^n) on the
-        documented source flow/length scale.
+        Outlet-flow coefficient for Cv4*(h+z)**n, in mL/(s cm^n).
     n : float
         Dimensionless exponent in the outlet-flow law.
     Wa1 : float
@@ -745,10 +743,9 @@ def neutralization(*,
     pK2 : float
         Second acid dissociation pK value, dimensionless.
     q1 : float
-        Constant acid feed flow, documented on the source L/s scale.
+        Constant acid feed flow in mL/s.
     d : float
-        Buffer feed flow q2, documented on the source L/s scale and bound as a
-        disturbance parameter.
+        Buffer feed flow q2 in mL/s, bound as a disturbance parameter.
 
     Returns
     -------
@@ -761,12 +758,12 @@ def neutralization(*,
     State order is ``[Wa4, Wb4, h, pH]``: two reaction invariants,
     liquid height and outlet pH. The first three states are differential;
     pH is algebraic and its derivative is unused. Invariants may be negative.
-    Input u is alkaline flow q3 on the same scale as q1 and d.
+    Input u is alkaline flow q3 in mL/s.
 
-    Source units are mol/L, cm, cm^2 and L/s, but the equations apply no
-    explicit litre-to-cm^3 conversion. Reconcile flow and geometry scaling
-    when supplying a new dimensional parameter set. Use a positive liquid
-    height and a consistent pH. Evaluate the wrapper as ``F(t, x, xdot, u)``;
+    Time is in seconds, invariant concentrations in mol/L, and height in cm.
+    Flow values in mL/s are numerically identical to values in cm^3/s.
+    Use a positive liquid height and a consistent pH.
+    Evaluate the wrapper as ``F(t, x, xdot, u)``;
     changing the bound disturbance d requires rebuilding the model.
     """
     t    = _sym('t')

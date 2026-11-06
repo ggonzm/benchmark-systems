@@ -37,6 +37,49 @@ def test_numeric_and_symbolic_dae_residuals_match(
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
+@pytest.mark.parametrize(
+    ("body_rates", "control"),
+    [
+        pytest.param([0.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0], id="body-torque"),
+        pytest.param([0.1, 0.2, 0.3], [1.0, 1.0, 1.0, 1.0], id="torque-free-rotation"),
+    ],
+)
+def test_quadrotor_dae_angular_dynamics_match_ode(body_rates, control):
+    parameters = {
+        "Ixx": 0.4, "Iyy": 0.5, "Izz": 0.7, "k": 1.0,
+        "L": 0.2, "m": 2.0, "drag": 0.1,
+    }
+    angles = [0.4, 0.3, 0.2]
+    phi, theta, _ = angles
+    sp, cp = np.sin(phi), np.cos(phi)
+    st, ct = np.sin(theta), np.cos(theta)
+    rate_map = np.array([[1, 0, -st], [0, cp, ct * sp], [0, -sp, ct * cp]])
+
+    ode_state = np.r_[np.zeros(3), angles, np.zeros(3), body_rates]
+    ode_derivative = models.quadrotor_ode(0.0, ode_state, u=control, **parameters)
+    euler_rates = ode_derivative[3:6]
+    roll_rate, pitch_rate, _ = euler_rates
+    rate_map_dot = np.array([
+        [0, 0, -ct * pitch_rate],
+        [0, -sp * roll_rate, ct * cp * roll_rate - st * sp * pitch_rate],
+        [0, -cp * roll_rate, -ct * sp * roll_rate - st * cp * pitch_rate],
+    ])
+    # Differentiate body_rates = rate_map @ euler_rates.
+    euler_acceleration = np.linalg.solve(
+        rate_map, ode_derivative[9:12] - rate_map_dot @ euler_rates
+    )
+    dae_state = np.r_[np.zeros(3), angles, np.zeros(3), euler_rates]
+    # Only the angular residual is checked, so linear accelerations are unused.
+    dae_derivative = np.r_[np.zeros(3), euler_rates, np.zeros(3), euler_acceleration]
+
+    numeric = models.quadrotor_dae(0.0, dae_state, dae_derivative, u=control, **parameters)
+    symbolic_residual = symbolic.quadrotor_dae(**parameters)(
+        0.0, dae_state, dae_derivative, control
+    )
+    np.testing.assert_allclose(numeric[9:12], 0.0, atol=1e-12)
+    np.testing.assert_allclose(np.asarray(symbolic_residual)[9:12], 0.0, atol=1e-12)
+
+
 def test_multilevel_cart_pendulum_friction_matches_symbolic_backend():
     # Nonzero velocities exercise every element of the friction vector.
     parameters = {

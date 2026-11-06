@@ -186,7 +186,7 @@ def furuta_pendulum(*,
                     l1: float, l2 : float,
                     K: float) -> ca.Function:
     """
-    Build a symbolic Furuta pendulum driven by motor voltage.
+    Build a symbolic Furuta pendulum driven by a normalized motor command.
 
     Parameters
     ----------
@@ -212,8 +212,7 @@ def furuta_pendulum(*,
     l2 : float
         Pendulum pivot-to-centre-of-mass distance in m; supplied explicitly.
     K : float
-        Effective motor torque per applied voltage in N m/V; applied torque is
-        K*u.
+        Motor-arm torque at unit command, in N m. The applied torque is K*u.
 
     Returns
     -------
@@ -225,8 +224,10 @@ def furuta_pendulum(*,
     -----
     State order is ``[theta1, theta2, omega1, omega2]``. Angles are in
     rad and velocities in rad/s; ``theta2=0`` hangs downward and
-    ``theta2=pi`` is upright. Input ``u`` is motor voltage in V, and time is
-    in seconds. Centre-of-mass distances are not inferred from arm lengths.
+    ``theta2=pi`` is upright. Input ``u`` is a dimensionless signed motor command,
+    nominally in [-1, 1], and is used as supplied. For voltage normalization,
+    use ``u = V/Vmax`` and ``K = (Kt/R)*Vmax`` under the simplified motor model.
+    Time is in seconds. Centre-of-mass distances are not inferred from arm lengths.
     Evaluate the function as ``f(t, x, u)`` with nonsingular inertia terms.
     """
     
@@ -256,7 +257,7 @@ def furuta_pendulum(*,
         (1/Delta) * (gamma*w0**2*u_sym - 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
                     - omega1**2*alpha*sin(theta2)*cos(theta2)**2 + omega2*cp2*alpha*cos(theta2) + alpha*w0**2*sin(theta2)*cos(theta2)),
         (1/Delta) * (-alpha*gamma*w0**2*u_sym*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 + omega1*cp1*alpha*cos(theta2)
-                    - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
+                    - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega1**2*sin(theta2)*cos(theta2)
                     - (beta + sin(theta2)**2)*omega2*cp2 - beta*w0**2*sin(theta2) - w0**2*sin(theta2)**3)
 )
     return ca.Function('furuta_pendulum', [t, x, u_sym], [dx],

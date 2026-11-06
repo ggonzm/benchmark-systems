@@ -88,8 +88,12 @@ Furuta pendulum geometry, centre-of-mass distances and motor torque.
 
 `furuta_pendulum` orders its states as horizontal motor-arm angle `theta1`,
 pendulum-arm angle `theta2` (rad), then their velocities `omega1`, `omega2`
-(rad/s). `theta2=0` is downward and `theta2=pi` upward. Input `u` is motor
-voltage (V); the applied motor torque is `K*u`.
+(rad/s). `theta2=0` is downward and `theta2=pi` upward. Input `u` is a
+dimensionless signed motor command with a nominal range of `[-1, 1]`.
+The applied motor torque is `K*u`, where `K` is the torque in N·m at unit
+command. With the simplified voltage-to-torque approximation, use
+`u = V/Vmax` and `K = (Kt/R)*Vmax`, where `Kt` is the motor torque constant,
+`R` is the armature resistance, and `Vmax` is the voltage magnitude at full command.
 
 The model requires both arm masses, inertias about their centres of mass,
 friction coefficients, and explicit pivot-to-centre-of-mass distances `l1` and `l2`.
@@ -169,11 +173,11 @@ The link centres of mass and inertias are calculated from `L/2` as in the
 double-pendulum model. All `2*(N+1)` states are differential.
 
 The `m` and `L` sequences must have matching lengths. When friction is
-enabled, `deltas` contains `N+1` entries: one for
-the cart-ground interaction and one for each rotational joint. The
-implementation forms friction magnitudes as `abs(deltas * velocities)`
-before assembling the equations. This is the implemented friction law;
-`deltas` are not simply a diagonal constant viscous-damping matrix. With
+enabled, `deltas` contains `N+1` linear viscous friction coefficients.
+The first is for cart motion relative to the ground, in N·s/m. The rest
+are for the rotational joints in order from the cart, in N·m·s/rad.
+The force on the cart is proportional to its velocity, and each joint
+torque opposes the relative angular velocity across the joint. With
 `deltas=None`, friction contributions are zero.
 
 ### Quadrotor: ODE and DAE
@@ -286,18 +290,15 @@ Continuous stirred-tank reactor and cooling jacket.
 
 `cstr` has concentrations `[Ca, Cb]`, documented in mol/L, and reactor/jacket
 temperatures `[Tr, Tk]` in °C. The Arrhenius expressions add 273.15 internally.
-Input is `u=[F, dQ]`. Positive `dQ` contributes heat to the jacket equation;
-negative `dQ` removes it.
+Time is in hours. Input `u=[F, dQ]` contains the dilution rate `F` in h⁻¹
+and the signed jacket heat flow `dQ` in kJ/h. To obtain `F`, divide the
+volumetric inlet flow in L/h by reactor volume `V` in L. To obtain `dQ`
+from a thermal power in kW, multiply by 3600. Positive `dQ` heats the jacket
+and negative `dQ` cools it. The second-order reaction coefficient `K0_ad`
+is in L/(mol·h).
 
-The equations follow the supplied parameter set's engineering scale. In particular, the
-equations use `F*(Ca_in-Ca)` and `F*(T_in-Tr)` directly: `F` is the dilution
-multiplier in those expressions, with **no division by reactor volume**.
-Likewise, `dQ` is added directly to `K_w*A*(Tr-Tk)` with **no kW-to-kJ/h
-conversion**. The input docstrings label these values as normalized inlet
-flow (L/h) and cooling heat (kW), but the functions do not perform conversions
-between those labels and the balance-equation scale. Convert a physical
-volumetric flow or thermal power to the chosen balance scale before calling
-the model.
+For the CSTR animation, pass the volumetric flow `F*V` in L/h and the
+model heat flow `dQ` in kJ/h. The viewer displays the heat flow in kW.
 
 Concentration evaluations use a small positive floor, with lower-bound
 derivative guards. Temperatures are not clipped; keep absolute temperature
@@ -367,12 +368,10 @@ differential and pH is algebraic (`DAEFunction.n_diff == 3`).
 do not clip them as if they were ordinary nonnegative species concentrations.
 
 Input `u=q3` is the alkaline flow. Acid flow `q1` is a fixed parameter and
-buffer flow `d=q2` is a disturbance parameter. The source docstrings use
-mol/L for invariant concentrations, cm for `h` and `z`, cm² for area `A`,
-and L/s for flows. The equations use these numeric parameters directly,
-including division by `A` and `h`, without an explicit litre-to-cm³
-conversion. Keep the original parameter scaling consistent; when introducing
-a new dimensional data set, reconcile its flow/geometry scale before use.
+buffer flow `d=q2` is a disturbance parameter. Supply all flows in mL/s,
+equivalent to cm³/s. Time is in seconds, invariant concentrations in mol/L,
+`h` and `z` in cm, and area `A` in cm². The coefficient `Cv4` has units
+of mL/(s·cmⁿ), so the outlet flow `Cv4*(h+z)**n` is also in mL/s.
 
 The model requires positive liquid height and a valid real-valued outlet-flow expression
 `Cv4*(h+z)**n`. The initial pH must satisfy the nonlinear algebraic

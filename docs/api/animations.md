@@ -171,6 +171,9 @@ valve-fraction trajectories, with four positive `h_max` values. Filled
 fractions use those maximum heights. The displayed pipe routing follows the
 same crossed upper-tank feed convention as the model.
 
+Pump labels show the supplied commands in percent. Branch labels show
+`(1 - gamma) * u` and `gamma * u` on the same percentage scale.
+
 ```{figure} ../_static/models/johansson.png
 :alt: Four interconnected water tanks supplied by two pumps and two splitting valves, with upper tanks draining into lower tanks.
 :width: 460px

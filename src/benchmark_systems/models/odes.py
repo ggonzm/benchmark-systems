@@ -149,12 +149,14 @@ def furuta_pendulum(t, x, *,
     l2 : float
         Distance from the pivot point to the center of mass of the pendulum arm.
     K : float
-        DC motor torque constant. The torque applied to the motor arm is modeled as K*u, where u is the control input.
+        Motor-arm torque at unit command, in N*m. The applied torque is K*u.
     
     Control inputs
     --------------
     u : float, optional
-        Voltage applied to the DC motor. Default is 0.0.
+        Dimensionless signed motor command, nominally in [-1, 1].
+        For voltage normalization, u = V/Vmax and K = (Kt/R)*Vmax under
+        the simplified motor model. Commands are used as supplied. Default is 0.0.
     '''
     
     theta1, theta2, omega1, omega2 = x
@@ -180,7 +182,7 @@ def furuta_pendulum(t, x, *,
     dx[2] = (1/Delta) * (gamma*w0**2*u - 2*omega1*omega2*sin(theta2)*cos(theta2) - omega1*cp1 + omega2**2*alpha*sin(theta2)
                          - omega1**2*alpha*sin(theta2)*cos(theta2)**2 + omega2*cp2*alpha*cos(theta2) + alpha*w0**2*sin(theta2)*cos(theta2))
     dx[3] = (1/Delta) * (-alpha*gamma*w0**2*u*cos(theta2) + 2*omega1*omega2*alpha*sin(theta2)*cos(theta2)**2 + omega1*cp1*alpha*cos(theta2)
-                         - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega2**2*sin(theta2)*cos(theta2)
+                         - omega2**2*alpha**2*sin(theta2)*cos(theta2) + (beta + sin(theta2)**2)*omega1**2*sin(theta2)*cos(theta2)
                          - (beta + sin(theta2)**2)*omega2*cp2 - beta*w0**2*sin(theta2) - w0**2*sin(theta2)**3)
     return dx
     
@@ -384,7 +386,7 @@ def cstr(t, x, *,
     Hr_bc : float
         Heat of reaction for the reaction B -> others (in kJ/mol).
     K0_ad : float
-        Pre-exponential factor for the reaction of A with itself (in 1/h).
+        Pre-exponential factor for the reaction of A with itself (in L/(mol h)).
     Ea_ad : float
         Activation energy for the reaction of A with itself (in kJ/mol).
     Hr_ad : float
@@ -417,7 +419,10 @@ def cstr(t, x, *,
     Control inputs
     --------------
     u : Sequence[float], optional
-        Inputs [F, dQ]. F is the normalized inlet flow (in L/h) and dQ is the heat removed by the coolant (in kW). Default is [0.0, 0.0].
+        Inputs [F, dQ]. F is the dilution rate in 1/h, obtained by dividing
+        the volumetric inlet flow in L/h by V in L. dQ is the signed heat
+        flow into the jacket in kJ/h, with negative values for cooling.
+        Default is [0.0, 0.0].
     '''
 
     Ca, Cb, Tr, Tk = x

@@ -89,6 +89,32 @@ def test_numeric_and_symbolic_odes_match(numeric, factory, parameters, state, co
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
+@pytest.mark.parametrize(("omega1", "omega2"), [(0.0, 2.0), (2.0, 0.0)])
+def test_furuta_pendulum_satisfies_link_torque_balance(omega1, omega2):
+    parameters = {
+        "m1": 0.2, "L1": 0.3, "J1": 0.02, "b1": 0.0,
+        "m2": 0.4, "L2": 0.5, "J2": 0.03, "b2": 0.0,
+        "l1": 0.15, "l2": 0.25, "K": 0.1,
+    }
+    theta2 = 0.4
+    state = [0.0, theta2, omega1, omega2]
+    control = 0.5
+    sin_theta, cos_theta = np.sin(theta2), np.cos(theta2)
+    link_inertia = parameters["J2"] + parameters["m2"] * parameters["l2"]**2
+    coupling = parameters["m2"] * parameters["L1"] * parameters["l2"]
+    expected_torque = (
+        link_inertia * omega1**2 * sin_theta * cos_theta
+        - parameters["m2"] * 9.81 * parameters["l2"] * sin_theta
+    )
+    numeric = models.furuta_pendulum(0.25, state, u=control, **parameters)
+    symbolic_result = _evaluate(symbolic.furuta_pendulum(**parameters), state, [control])
+
+    # Check the pendulum equation before inverting the coupled inertia matrix.
+    for derivative in (numeric, symbolic_result):
+        torque = coupling * cos_theta * derivative[2] + link_inertia * derivative[3]
+        assert torque == pytest.approx(expected_torque, abs=1e-12)
+
+
 def test_johansson_backends_match_above_saturation():
     # The symbolic backend previously omitted the numerical model's upper clamp.
     parameters = {

@@ -118,6 +118,34 @@ def test_mechanical_animators_return_artists_at_last_frame():
     plt.close(fig)
 
 
+def test_johansson_displays_pump_commands_and_branch_shares_as_percentages():
+    fig, ax = plt.subplots()
+    update = animations.JohanssonTanks(
+        ax, h_max=[10.0] * 4, heights=[[1.0, 1.0]] * 4,
+        pumps=[[10.0, 20.0], [20.0, 40.0]],
+        gammas=[[0.25, 0.5], [0.25, 0.75]],
+    )
+    for frame, expected in enumerate(([10, 7.5, 2.5, 20, 15, 5], [20, 10, 10, 40, 10, 30])):
+        update(frame)
+        labels = [text.get_text() for text in ax.texts if text.get_text().endswith("%")]
+        assert labels == [f"{command:.1f}%" for command in expected]
+    plt.close(fig)
+
+
+def test_cstr_displays_volumetric_flow_and_jacket_power():
+    fig, ax = plt.subplots()
+    update = animations.CSTR(
+        ax, Ca=[1.0, 1.0], Cb=[0.5, 0.5], Tr=[130.0, 130.0], Tk=[125.0, 125.0],
+        F=[100.0, 120.0], dQ=[-3600.0, -7200.0],
+    )
+    assert [text.get_text() for text in ax.texts].count("100.00 L/h") == 2
+    assert any(text.get_text() == "dQ=-1.0 kW" for text in ax.texts)
+    update(1)
+    assert [text.get_text() for text in ax.texts].count("120.00 L/h") == 2
+    assert any(text.get_text() == "dQ=-2.0 kW" for text in ax.texts)
+    plt.close(fig)
+
+
 def test_process_animators_return_artists_at_last_frame():
     values = np.array([1.0, 1.5, 2.0])
 
