@@ -11,4 +11,4 @@ def test_release_workflow_pins_supported_pdm_version():
     assert match is not None, "Release workflow must pin an explicit PDM version"
 
     version = tuple(int(part) for part in match.groups())
-    assert version >= (2, 29, 0)
+    assert version >= (2, 29, 7)
