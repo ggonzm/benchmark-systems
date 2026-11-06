@@ -24,4 +24,4 @@
 - Run the test suite with `pdm run pytest`. Tests cover numerical/symbolic parity, integrator contracts, and public exports; no lint, formatter, typecheck, or CI configuration currently exists.
 - Run a focused import smoke check for numerical work: `pdm run python -c "import benchmark_systems; import benchmark_systems.models"`.
 - For symbolic changes, use `pdm run python -c "import benchmark_systems.symbolic"`; for animation changes, use `pdm run python -c "import benchmark_systems.animations"`.
-- Before release/version work, keep `pyproject.toml` and `src/benchmark_systems/__init__.py` synchronized; both currently report `1.1.2`.
+- Before release/version work, keep `pyproject.toml` and `src/benchmark_systems/__init__.py` synchronized.

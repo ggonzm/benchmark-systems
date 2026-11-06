@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0
+
+- Correct the rotor torque projection and Coriolis coupling in the numerical
+  and symbolic quadrotor DAEs.
+- Correct Furuta pendulum dynamics and document its normalized motor command.
+- Use linear viscous damping for the cart and joints in the multilevel
+  cart-pendulum, with each joint acting on its relative angular velocity.
+- Clarify CSTR dilution and heat-flow units, and correct the animation labels.
+- Use mL/s for neutralization flow labels and correct the base-stream
+  composition in the neutralization examples.
+- Label Johansson pump commands and their branch shares as percentages.
+
 ## 1.1.2
 
 - Update the publishing toolchain for compatibility with its HTTP dependencies.
