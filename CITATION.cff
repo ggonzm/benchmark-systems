@@ -4,8 +4,8 @@
 cff-version: 1.2.0
 title: benchmark-systems
 message: >-
-  If you use this software, please cite it using the
-  metadata from this file.
+  If you use this software in your research, please cite the article
+  listed in preferred-citation.
 type: software
 authors:
   - given-names: Guzmán
@@ -30,6 +30,27 @@ authors:
     orcid: 'https://orcid.org/0000-0002-3921-1599'
 year: 2025
 repository-code: 'https://github.com/suppress-unileon/benchmark-systems'
+preferred-citation:
+  type: article
+  title: Educational platform for training in IEC 61499
+  authors:
+    - given-names: Guzmán
+      family-names: González-Mateos
+    - given-names: Antonio
+      family-names: Morán
+    - given-names: Miguel A.
+      family-names: Prada
+    - given-names: Serafín
+      family-names: Alonso
+    - given-names: Manuel
+      family-names: Domínguez
+  journal: IFAC-PapersOnLine
+  year: 2025
+  volume: '59'
+  issue: '7'
+  start: 242
+  end: 247
+  doi: 10.1016/j.ifacol.2025.08.054
 abstract: >-
   Open collection of benchmark problems. The goal is to
   provide a common set of models to test and compare

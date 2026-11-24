@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Add the recommended research article citation to the README and CITATION.cff.
+
 ## 1.2.0
 
 - Correct the rotor torque projection and Coriolis coupling in the numerical

@@ -328,3 +328,25 @@ python -m pip install "benchmark-systems[all]"
 
 `[all]` includes CasADi and Matplotlib. See the installation guide in the
 documentation for virtual environments, version checks and source installs.
+
+## References
+
+If you use `benchmark-systems` in your research, please cite the following paper.
+
+Guzmán González-Mateos, Antonio Morán, Miguel A. Prada, Serafín Alonso, and
+Manuel Domínguez (2025). Educational platform for training in IEC 61499.
+*IFAC-PapersOnLine*, 59(7), 242–247.
+[https://doi.org/10.1016/j.ifacol.2025.08.054](https://doi.org/10.1016/j.ifacol.2025.08.054)
+
+```bibtex
+@article{GonzalezMateos2025,
+  author = {González-Mateos, Guzmán and Morán, Antonio and Prada, Miguel A. and Alonso, Serafín and Domínguez, Manuel},
+  title = {Educational platform for training in {IEC 61499}},
+  journal = {IFAC-PapersOnLine},
+  year = {2025},
+  volume = {59},
+  number = {7},
+  pages = {242--247},
+  doi = {10.1016/j.ifacol.2025.08.054}
+}
+```
